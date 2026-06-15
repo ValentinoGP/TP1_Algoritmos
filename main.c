@@ -25,6 +25,39 @@ int main(int argc, char *argv[]) {
     int dormir = 0;
 
     // BEGIN código del alumno
+    struct nodo_m { struct nodo_m *sig; modelo_t *modelo; };
+    struct nodo_m *lista_modelos = NULL;
+
+    FILE *f = fopen("modelos.stl", "rb");
+    if (f) {
+        unidades_t unidades;
+        size_t maxlong;
+        leer_encabezado_stl(f);
+        leer_formato_STL(f, &unidades, &maxlong);
+        while (1) {
+            float *coords = NULL;
+            size_t ncoords = 0;
+            size_t *lineas = NULL;
+            size_t nlineas = 0;
+            char etiqueta[maxlong + 1];
+            if (!leer_modelo_3d(f, maxlong, etiqueta, &ncoords, &coords, &nlineas, &lineas))
+                break;
+            etiqueta[maxlong] = '\0';
+            modelo_t *m = modelo_crear(etiqueta, coords, ncoords, lineas, nlineas);
+            free(coords);
+            free(lineas);
+            if (m) {
+                struct nodo_m *n = malloc(sizeof(struct nodo_m));
+                if (n) {
+                    n->modelo = m;
+                    n->sig = lista_modelos;
+                    lista_modelos = n;
+                }
+            }
+        }
+        fclose(f);
+    }
+
     unsigned char color[3] = {0xff, 0, 0}, aux;
     int x = VENTANA_ANCHO / 2;
     int y = VENTANA_ALTO / 2;
@@ -88,6 +121,15 @@ int main(int argc, char *argv[]) {
     }
 
     // BEGIN código del alumno
+    {
+        struct nodo_m *n = lista_modelos;
+        while (n) {
+            struct nodo_m *sig = n->sig;
+            modelo_destruir(n->modelo);
+            free(n);
+            n = sig;
+        }
+    }
     // END código del alumno
 
     SDL_DestroyRenderer(renderer);
