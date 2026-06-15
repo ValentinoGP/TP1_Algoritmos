@@ -1,5 +1,8 @@
 #include <SDL2/SDL.h>
-
+#include "modelo.h"
+#include "obstaculo.h"
+#include "stl.h"
+#include "tanque.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <math.h>
