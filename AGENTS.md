@@ -17,12 +17,12 @@ No Makefile, test/lint/CI tooling.
 
 | Section | Lines | Purpose |
 |---------|-------|---------|
-| Init    | 27–64 | STL loading → `lista_modelos` → create tanks/obstacles |
-| Event   | 72–96 | Input handling (keyboard) |
-| Draw    | 105–108 | Per-frame update + rendering |
-| Cleanup | 123–133 | Free all dynamic memory |
+| Init    | 27–97  | STL loading → `lista_modelos` → create tanks/obstacles |
+| Event   | 105–129 | Input handling (keyboard) |
+| Draw    | 138–141 | Per-frame update + rendering |
+| Cleanup | 156–166 | Free all dynamic memory |
 
-Line numbers are stable (verified against current `main.c`).
+(The `BEGIN` / `END` markers are the authoritative boundary — these line numbers are current as of the latest commit.)
 
 ## Event loop quirk
 
@@ -30,7 +30,7 @@ Line numbers are stable (verified against current `main.c`).
 SDL_PollEvent → event handler → continue (skips render this iteration)
 ```
 
-Events and per-frame updates **never run in the same iteration**. The `continue` at line 98 is outside your control. Put physics, AI, spawning, and missile updates in the Draw section.
+Events and per-frame updates **never run in the same iteration**. The `continue` at line 131 is outside your control. Put physics, AI, spawning, and missile updates in the Draw section.
 
 ## Local-only data
 
@@ -54,4 +54,6 @@ Events and per-frame updates **never run in the same iteration**. The `continue`
 - Coordinates are `float`, angles in radians, line indices `size_t`.
 - `tanque.c:4` defines `M_PI 3.14` locally (not the real π, used consistently).
 - `modelo_crear` deep-copies coords/lineas arrays; the caller's copies can be freed immediately (see main.c:47-48).
-- The student-facing guide at `guia.md` has detailed per-section instructions.
+- `crear_tanque_enemigo` returns `NULL` if position is within 50 units of any obstacle — the Init section loops until a valid spot is found.
+- `srand(SDL_GetTicks())` is already called in Init; do not reseed.
+- The student-facing guide at `guia.md` has detailed per-section instructions with the expected key mapping (arrows→move, A/D→turret, Space→fire).

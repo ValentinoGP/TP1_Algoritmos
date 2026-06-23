@@ -105,7 +105,7 @@ int main(int argc, char *argv[]) {
             // BEGIN código del alumno
             if (event.type == SDL_KEYDOWN) {
                 // Se apretó una tecla
-                switch(event.key.keysym.sym) {
+                switch(event.key.keysym.sym) {  // cambiar todo lo que hay dentro de los cases -> llamar funcion + resetear timers 
                     case SDLK_UP:
                         y -= 10;
                         break;
