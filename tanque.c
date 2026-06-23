@@ -1,7 +1,9 @@
 #include "tanque.h"
+#include "obstaculo.h"
 #include <stdlib.h>
 #include <math.h>
 #define M_PI 3.14
+
 
 struct tanque {
     float x, y;
@@ -91,4 +93,14 @@ void tanque_actualizar(tanque_t *t, float dt) {
         t->misil_tiempo -= dt;
         if (t->misil_tiempo <= 0) t->misil_activo = false;
     }
+}
+
+tanque_t *crear_tanque_enemigo(float x, float y, float phi, int vidas,
+                                 obstaculo_t *obs[], size_t n_obs) {
+    for (size_t i = 0; i < n_obs; i++) {
+        float dx = x - obstaculo_x(obs[i]);
+        float dy = y - obstaculo_y(obs[i]);
+        if (sqrtf(dx*dx + dy*dy) < 50.0f) return NULL;
+    }
+    return tanque_crear(x, y, phi, vidas);
 }

@@ -1,6 +1,6 @@
 # AGENTS.md — TP1_algoritmos
 
-"Battle Zone" tank game, FIUBA Algorithms course assignment. SDL2, C.
+"Battle Zone" tank game (SDL2, C), FIUBA Algorithms assignment.
 
 ## Build & run
 
@@ -9,52 +9,49 @@ gcc -o tp1 *.c -lSDL2 -lm
 ./tp1   # modelos.stl must be in CWD
 ```
 
-No Makefile, no test/lint/CI tooling.
+No Makefile, test/lint/CI tooling.
 
-## Constraint: student code sections only
+## The one hard rule: student sections only
 
-**Only change code between `BEGIN código del alumno` / `END código del alumno` markers** in `main.c`. The framework owns everything else. There are three student sections plus a cleanup block:
+`main.c` has four `BEGIN código del alumno` / `END código del alumno` blocks. **Only edit inside them.** The framework owns everything else.
 
 | Section | Lines | Purpose |
 |---------|-------|---------|
-| Init | 27–64 | STL file loading, model list, initial state |
-| Event | 72–96 | Input handling (keyboard, etc.) |
-| Draw | 105–108 | Per-frame rendering logic |
-| Cleanup | 123–133 | Free `lista_modelos` before exit |
+| Init    | 27–64 | STL loading → `lista_modelos` → create tanks/obstacles |
+| Event   | 72–96 | Input handling (keyboard) |
+| Draw    | 105–108 | Per-frame update + rendering |
+| Cleanup | 123–133 | Free all dynamic memory |
 
-## Event loop semantics
+Line numbers are stable (verified against current `main.c`).
+
+## Event loop quirk
 
 ```
-SDL_PollEvent → student event handler → continue (skips render for this iteration)
+SDL_PollEvent → event handler → continue (skips render this iteration)
 ```
 
-Events and per-frame updates **never happen in the same loop iteration**. The `continue` at line 98 is outside student control. Per-frame logic (physics, updates, spawning) must go in the Draw section.
+Events and per-frame updates **never run in the same iteration**. The `continue` at line 98 is outside your control. Put physics, AI, spawning, and missile updates in the Draw section.
 
-## Local variables
+## Local-only data
 
-`struct nodo_m` (singly linked list, `modelo_t *modelo` + `sig`) and `lista_modelos` head are **local to `main()`** in the init section. Not accessible from other modules.
+`struct nodo_m` (singly linked list: `modelo_t *modelo` + `sig`) and `lista_modelos` are local variables inside `main()` init section. No other module sees them.
 
 ## Architecture
 
 | Module | Role |
 |--------|------|
-| `stl` | Binary STL parser (custom format, not standard STL) — reads `modelos.stl` |
-| `modelo` | Opaque `modelo_t`: vertices (`float coords[3*N]`) + lines (`size_t lineas[2*N]`) |
-| `obstaculo` | Position + rotation + model reference |
-| `tanque` | Tank: pos, rotation, turret, lives, missile with cooldown |
-| `main.c` | SDL2 window (1024×768), 24 FPS event loop, (de)allocates the model list |
+| `stl`   | Custom binary STL parser (not standard STL) — reads `modelos.stl` |
+| `modelo` | Opaque `modelo_t` storing vertices (`float coords[3*N]`) + line topology (`size_t lineas[2*N]`) |
+| `obstaculo` | Position + rotation + pointer to a `modelo_t` (does not own it) |
+| `tanque` | Full tank state (pos, hull rotation, turret angle, lives, missile w/ cooldown) |
+| `main.c` | Orchestrator: SDL2 window (1024×768), 24 FPS loop, owns `lista_modelos` |
 
-### Data flow
+**Data flow:** `stl` parses → `modelo` stores → `main.c` builds linked list → student code creates `tanque_t`/`obstaculo_t` which reference `modelo_t` instances → main loop polls events → updates state → draws.
 
-1. `stl.c` parses `modelos.stl` → models (name, vertex coords, line topology)
-2. `modelo.c` stores each as opaque `modelo_t`
-3. `main.c` loads all `modelo_t` into its local `lista_modelos`
-4. `obstaculo_t` / `tanque_t` reference `modelo_t` or compute their own geometry
-5. `main.c` polls events, updates state, draws
+## Key gotchas
 
-### Type conventions
-
-- `modelo_t`, `obstaculo_t`, `tanque_t` are opaque — always use pointers
-- Coordinates are `float`, angles in radians, line indices `size_t`
-- `unidades_t` enum: `MM, CM, M, IN, FT, MILS`
-- `tanque.c:4` defines `M_PI 3.14` locally (not the real π, but used consistently)
+- All types are opaque — always use pointers and accessor functions.
+- Coordinates are `float`, angles in radians, line indices `size_t`.
+- `tanque.c:4` defines `M_PI 3.14` locally (not the real π, used consistently).
+- `modelo_crear` deep-copies coords/lineas arrays; the caller's copies can be freed immediately (see main.c:47-48).
+- The student-facing guide at `guia.md` has detailed per-section instructions.

@@ -61,6 +61,39 @@ int main(int argc, char *argv[]) {
     unsigned char color[3] = {0xff, 0, 0}, aux;
     int x = VENTANA_ANCHO / 2;
     int y = VENTANA_ALTO / 2;
+
+    srand(SDL_GetTicks());
+
+    size_t num_obs = 0;
+    for (struct nodo_m *n = lista_modelos; n; n = n->sig) {
+        const char *name = modelo_nombre(n->modelo);
+        if (strcmp(name, "CUBO1") == 0 || strcmp(name, "CUBO2") == 0 ||
+            strcmp(name, "CUBO3") == 0 || strcmp(name, "PIRAMIDE1") == 0 ||
+            strcmp(name, "PIRAMIDE2") == 0 || strcmp(name, "PIRAMIDE3") == 0)
+            num_obs++;
+    }
+
+    obstaculo_t *obstaculos[num_obs];
+    size_t j = 0;
+    for (struct nodo_m *n = lista_modelos; n; n = n->sig) {
+        const char *name = modelo_nombre(n->modelo);
+        if (strcmp(name, "CUBO1") == 0 || strcmp(name, "CUBO2") == 0 ||
+            strcmp(name, "CUBO3") == 0 || strcmp(name, "PIRAMIDE1") == 0 ||
+            strcmp(name, "PIRAMIDE2") == 0 || strcmp(name, "PIRAMIDE3") == 0)
+            obstaculos[j++] = obstaculo_crear(
+                rand() % (VENTANA_ANCHO - 200) + 100,
+                rand() % (VENTANA_ALTO - 200) + 100,
+                0, n->modelo);
+    }
+
+    tanque_t *jugador = tanque_crear(VENTANA_ANCHO / 2, VENTANA_ALTO / 2, 0, 4);
+
+    tanque_t *enemigo = NULL;
+    while (!enemigo) {
+        float ex = rand() % VENTANA_ANCHO;
+        float ey = rand() % VENTANA_ALTO;
+        enemigo = crear_tanque_enemigo(ex, ey, 0, 3, obstaculos, num_obs);
+    }
     // END código del alumno
 
     unsigned int ticks = SDL_GetTicks();
