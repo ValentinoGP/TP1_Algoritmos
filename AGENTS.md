@@ -1,59 +1,114 @@
 # AGENTS.md — TP1_algoritmos
 
-"Battle Zone" tank game (SDL2, C), FIUBA Algorithms assignment.
+Battle Zone (FIUBA Algoritmos) — clon mejorado del clásico Atari con SDL2 y motor 3D propio.
 
 ## Build & run
 
 ```sh
-gcc -o tp1 *.c -lSDL2 -lm
-./tp1   # modelos.stl must be in CWD
+make          # produce ./battlezone
+./battlezone  # modelos.stl must be in CWD
 ```
 
-No Makefile, test/lint/CI tooling.
+Must compile **without warnings, without memory leaks** (`valgrind --suppressions=suppressions.supp --leak-check=full ./battlezone`).
 
-## The one hard rule: student sections only
+## Student sections only
 
-`main.c` has four `BEGIN código del alumno` / `END código del alumno` blocks. **Only edit inside them.** The framework owns everything else.
+`main.c` has four `BEGIN código del alumno` / `END código del alumno` blocks. Everything else is framework. Current line ranges:
 
 | Section | Lines | Purpose |
 |---------|-------|---------|
-| Init    | 27–97  | STL loading → `lista_modelos` → create tanks/obstacles |
-| Event   | 105–129 | Input handling (keyboard) |
-| Draw    | 138–141 | Per-frame update + rendering |
-| Cleanup | 156–166 | Free all dynamic memory |
+| Init    | 32–131 | STL → `lista_modelos` → create game objects |
+| Event   | 142–162 | Keyboard input |
+| Draw    | 170–339 | Per-frame update + 3D render |
+| Cleanup | 354–368 | Free all dynamic memory |
 
-(The `BEGIN` / `END` markers are the authoritative boundary — these line numbers are current as of the latest commit.)
+## World coordinates
 
-## Event loop quirk
+**Game world is 2D:** x,y in `[-150, 150]`. Screen is a separate projection step.
+
+- Player starts at `(0, 0)` facing `π/2` (toward +Y).
+- 50 obstacles at random `x,y ∈ [-150, 150]`, random rotation.
+- Enemy spawns 50 units from player, not on any obstacle.
+
+## 3D rendering via matrix stack
+
+**Critical:** the spec mandates transformation **matrices** and a **stack**. You must port these from previous course exercises:
+
+| Module | Source | Notes |
+|--------|--------|-------|
+| `matriz` | EJ1   | `matriz_crear_mper()`, `matriz_crear_mt()`, `matriz_crear_mz()`, `matriz_crear_my()`, `matriz_multiplicar()` |
+| `aplicar` | EJ3  | Updated: returns 3-component vector (x,y,z). Third component is depth; discard if `< 1` (behind camera). |
+| `pila` | Cátedra | Opaque stack for transformation matrices. |
+| `lista` | Cátedra | Must hold the loaded STL models (already partially implemented as `struct nodo_m` in Init). |
+
+Camera matrix (composed via sequential multiplication, then pushed as single matrix):
 
 ```
-SDL_PollEvent → event handler → continue (skips render this iteration)
+cam = I × MPER × Mz(π/2 + angz) × My(π/2 - angx) × Mz(-phi) × Mt(-x, -y, -3)
 ```
 
-Events and per-frame updates **never run in the same iteration**. The `continue` at line 131 is outside your control. Put physics, AI, spawning, and missile updates in the Draw section.
+Where `(x, y, phi)` = player position/rotation, `angx`/`angz` = head-bob animation (random `±0.00001` during movement).
 
-## Local-only data
+After camera push, for each object: push `Mt(x,y,z) × Mz(rot)`, apply with `matriz_aplicar`, pop. The camera stays on the stack during the whole render frame.
 
-`struct nodo_m` (singly linked list: `modelo_t *modelo` + `sig`) and `lista_modelos` are local variables inside `main()` init section. No other module sees them.
+## Model naming
 
-## Architecture
+From `modelos.stl` — classify by `modelo_nombre`:
 
-| Module | Role |
-|--------|------|
-| `stl`   | Custom binary STL parser (not standard STL) — reads `modelos.stl` |
-| `modelo` | Opaque `modelo_t` storing vertices (`float coords[3*N]`) + line topology (`size_t lineas[2*N]`) |
-| `obstaculo` | Position + rotation + pointer to a `modelo_t` (does not own it) |
-| `tanque` | Full tank state (pos, hull rotation, turret angle, lives, missile w/ cooldown) |
-| `main.c` | Orchestrator: SDL2 window (1024×768), 24 FPS loop, owns `lista_modelos` |
+| Category | Models | Usage |
+|----------|--------|-------|
+| Obstacles | `CUBO1`–`CUBO3`, `PIRAMIDE1`–`PIRAMIDE3` | 50 random obstacles |
+| Tank hull | `TANQUE` | One per tank |
+| Turret | `TORRETA` | On tank, rotates independently |
+| Radar | `RADAR` | On turret |
+| Missile | `MISIL` | Projectile |
+| Background | `HORIZONTE`, `MONTANAS`, `LUNA` | 3D skybox (drawn at origin with no camera offset) |
+| HUD chars | `A`–`Z`, `0`–`9`, ` ` (space) | Score, messages |
+| HUD icons | `*` (lives), `-` / `+` (crosshair), `#` (destruction) | 2D overlay |
+| Debris | `RESTO1`, `RESTO2` | Enemy destruction animation |
 
-**Data flow:** `stl` parses → `modelo` stores → `main.c` builds linked list → student code creates `tanque_t`/`obstaculo_t` which reference `modelo_t` instances → main loop polls events → updates state → draws.
+## Game rules summary
 
-## Key gotchas
+- **Lives:** player has 3 extra + current = 4 total.
+- **Score:** +1000 per enemy kill.
+- **Enemy:** dies → animation → new enemy 50 units from player.
+- **Player:** dies → lose life → if 0 → game over.
+- **Missile:** speed 24 m/s, lifetime 2 s, radius 3 m for collision.
+- **Movement collision:** radius 5 m — can't move into obstacles or other tank.
+- **Firing cooldown:** 2 s per tank.
+- **Player turret is fixed** (no A/D rotation for player).
+- **Enemy turret** tracks player within 1 rad FOV, resets to 0 otherwise, fires if within 0.1 rad.
 
-- All types are opaque — always use pointers and accessor functions.
-- Coordinates are `float`, angles in radians, line indices `size_t`.
-- `tanque.c:4` defines `M_PI 3.14` locally (not the real π, used consistently).
-- `modelo_crear` deep-copies coords/lineas arrays; the caller's copies can be freed immediately (see main.c:47-48).
-- `crear_tanque_enemigo` returns `NULL` if position is within 50 units of any obstacle — the Init section loops until a valid spot is found.
-- `srand(SDL_GetTicks())` is already called in Init; do not reseed.
-- The student-facing guide at `guia.md` has detailed per-section instructions with the expected key mapping (arrows→move, A/D→turret, Space→fire).
+## Event timing
+
+Player movement is **timed** (0.5 s). Holding a key re-triggers the timer. Speed: 7 m/s forward, 0.36 rad/s rotation.
+
+## Key map
+
+| Key | Action |
+|-----|--------|
+| Up / Down | Move forward / backward (7 m/s) |
+| Left / Right | Rotate hull (0.36 rad/s) |
+| Space | Fire |
+
+## HUD
+
+- Lives: `*` character drawn 2D
+- Score: numeric text drawn 2D
+- Crosshair: `-` normally, `+` when enemy within 0.15 rad
+- Direction indicator: text when enemy outside 1 rad FOV ("izquierda", "derecha", "detrás")
+
+## Animations
+
+- **Player hit:** `#` model (27 lines), draw one line per frame.
+- **Enemy kill:** 6 debris pieces (`TORRETA`, `RADAR`, 2×`RESTO1`, 2×`RESTO2`) on parabolic trajectory (`vx=5, vz=10, g=-9.81`), each rotated 60° apart in Z, plus random self-rotation.
+
+## Gotchas
+
+- `tanque.c:5` defines `#define M_PI 3.14` (redefines system macro). Clamping uses this value.
+- `modelo_crear` deep-copies arrays; caller can `free(coords)`/`free(lineas)` immediately.
+- All types are opaque — use accessor functions.
+- `guia.md` has per-section instructions but its line numbers are stale — use table above.
+- Screen-to-world: `(x_screen, y_screen)` → `(x_world = x_screen - W/2, y_world = -(y_screen - H/2))` scaled by projection.
+- `matriz_aplicar` returns 3 components: (x, y, depth). Column 2 (index 2) stores the w' (4th homogeneous coordinate). Points with depth < 1 are behind camera.
+- `RENDER_MODELO` macro in Draw pushes `cam × Mt(x,y,z) × Mz(rot)`, applies it to vertex points, renders lines, then pops everything.

@@ -1,38 +1,64 @@
 # Guía TP1 — main.c
 
-Esqueleto de un juego *Battle Zone* (tanques en 3D alámbrico). Hay que implementar el juego real dentro de las secciones marcadas.
+Esqueleto de *Battle Zone* (tanques 3D alámbrico, first-person shooter).
 
-## Init (líneas 27–64)
+## Init
 
-Los modelos 3D ya se cargan desde `modelos.stl` en `lista_modelos`. Hay que:
+Los modelos 3D se cargan desde `modelos.stl` en `lista_modelos`. En Init se hace:
 
-- **Recorrer** `lista_modelos` y según el nombre de cada modelo (`modelo_nombre(m->modelo)`), crear:
-  - **Tanques** con `tanque_crear(x, y, phi, vidas)` — uno para el jugador, uno o más para la IA.
-  - **Obstáculos** con `obstaculo_crear(x, y, phi, modelo)`.
-- Guardar punteros a los tanques/obstáculos creados. Se pueden declarar variables locales o arrays estáticos.
+1. **Identificar modelos** por nombre: `TANQUE`, `TORRETA`, `RADAR`, `MISIL`, `HORIZONTE`, `MONTANAS`, `LUNA`, y los 6 de obstáculos (`CUBO1`–`CUBO3`, `PIRAMIDE1`–`PIRAMIDE3`).
+2. **Crear 50 obstáculos** en `x,y ∈ [-150, 150]` con rotación aleatoria, eligiendo al azar entre los 6 modelos de obstáculo.
+3. **Crear jugador** en `(0, 0)` con `phi = π/2` (mirando +Y) y 4 vidas.
+4. **Crear enemigo** en posición aleatoria a 50 unidades del jugador, que no se superponga con ningún obstáculo (distancia ≥ 5).
+5. **Inicializar la pila de transformaciones** (stack) con la matriz identidad.
 
-## Evento (líneas 72–96)
+## Evento
 
-El teclado controla al tanque del jugador. Ya hay un `switch` de ejemplo. Cambiarlo para:
+El teclado controla al jugador. No hay A/D para torreta (el enunciado dice que el jugador **no** mueve la torreta).
 
 | Tecla | Acción |
 |-------|--------|
-| Flechas | `tanque_girar(t, delta)` / `tanque_mover(t, delta)` |
-| Otra tecla (A/D) | `tanque_girar_torreta(t, delta)` |
-| Espacio | `tanque_disparar(t)` si `tanque_puede_disparar(t)` |
+| Up | Inicia movimiento hacia adelante (7 m/s, 0.5 s) |
+| Down | Inicia movimiento hacia atrás (7 m/s, 0.5 s) |
+| Left | Inicia giro a izquierda (0.36 rad/s, 0.5 s) |
+| Right | Inicia giro a derecha (0.36 rad/s, 0.5 s) |
+| Space | `tanque_disparar(jugador)` si `tanque_puede_disparar(jugador)` |
 
-## Draw (líneas 105–108)
+Si se vuelve a presionar la misma tecla, se reinicia el timer de 0.5 s.
 
-Acá va la lógica por frame y el renderizado:
+Los eventos se drenan con un `while (SDL_PollEvent(...))` anidado para no saltear el renderizado.
 
-1. **Actualizar estado**: `tanque_actualizar(t, dt)` para cada tanque, movimiento de misiles, colisiones, IA enemiga, etc.
-2. **Renderizar**: para cada tanque/obstáculo, proyectar sus coordenadas 3D a 2D (rotación + traslación) y dibujar las líneas con `SDL_RenderDrawLine`. Usar `modelo_coords(m)` y `modelo_lineas(m)`.
-3. El `continue` del evento hace que update y render solo se ejecuten cuando **no hay evento pendiente**. No se puede intercalar lógica de juego dentro del manejador de eventos.
+## Draw
 
-## Cleanup (líneas 123–133)
+Lógica por frame y renderizado 3D:
 
-Ya libera `lista_modelos`. Agregar `tanque_destruir` y `obstaculo_destruir` para los que se hayan creado en Init.
+1. **Calcular dt** entre cuadros (clamped a 0.1s).
+2. **Head bob**: si el jugador se mueve, `angx`/`angz` varían ±0.00001 aleatorio.
+3. **Actualizar estado**: `tanque_actualizar` para ambos tanques (movimiento, misiles, enfriamiento).
+4. **Construir matriz de cámara** (multiplicación secuencial, un solo push):
+   ```
+   cam = I × MPER × Mz(π/2 + angz) × My(π/2 - angx) × Mz(-phi) × Mt(-x, -y, -3)
+   ```
+5. **Renderizar con macro RENDER_MODELO**:
+   - Crea `Mt(x,y,z)` y `Mz(rot)`, multiplica: `obj = Mt × Mz`
+   - Combina con cámara: `final = cam × obj`, apila
+   - Aplica `matriz_aplicar(final, pts_3d)` → (sx, sy, depth)
+   - Dibuja líneas si ambos extremos tienen depth ≥ 1 (delante de cámara)
+   - Desapila todo
+   - Se renderizan: obstáculos (blanco), enemigo (hull rojo, torreta naranja, radar amarillo), misiles (verde jugador, rojo enemigo), fondo (HORIZONTE, MONTANAS, LUNA)
+6. **Crosshair 2D**: dos líneas blancas en el centro de la pantalla.
 
----
+## Cleanup
 
-En resumen: el `main.c` es el **orquestador**. Usar las funciones de `tanque.h`, `obstaculo.h` y `modelo.h` para armar el juego.
+Liberar `lista_modelos` (recorrer nodos, destruir modelo y nodo), obstáculos (array), tanques (jugador y enemigo), y pila de transformaciones.
+
+Recordar: `valgrind --suppressions=suppressions.supp --leak-check=full ./battlezone` debe dar 0 pérdidas definitivas/indirectas/posibles.
+
+## TODO (lo que falta implementar)
+
+1. **Colisiones**: movimiento (radio 5) y misiles (radio 3)
+2. **IA enemiga**: trackeo de torreta, disparo, movimiento aleatorio
+3. **Animaciones**: `#` para hit al jugador, `RESTO1`/`RESTO2` para destrucción de enemigo
+4. **HUD**: vidas (`*`), puntaje, indicador de dirección
+5. **Score** y game over
+6. **Fondo 3D**: HORIZONTE/MONTANAS/LUNA sin desplazamiento de cámara
