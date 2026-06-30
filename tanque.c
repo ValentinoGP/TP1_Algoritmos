@@ -2,7 +2,10 @@
 #include "obstaculo.h"
 #include <stdlib.h>
 #include <math.h>
-#define M_PI 3.14
+#ifndef M_PI
+    #define M_PI 3.14159265358979323846
+#endif
+
 
 struct tanque {
     float x, y;
@@ -45,6 +48,15 @@ bool  tanque_misil_activo(const tanque_t *t)   { return t->misil_activo; }
 float tanque_misil_x(const tanque_t *t)        { return t->misil_x; }
 float tanque_misil_y(const tanque_t *t)        { return t->misil_y; }
 float tanque_misil_phi(const tanque_t *t)      { return t->misil_phi; }
+
+void tanque_set_posicion(tanque_t *t, float x, float y) {
+    t->x = x;
+    t->y = y;
+}
+
+void tanque_desactivar_misil(tanque_t *t) {
+    t->misil_activo = false;
+}
 
 void tanque_girar(tanque_t *t, float delta_phi) {
     t->phi += delta_phi;

@@ -16,6 +16,58 @@
 #define JUEGO_FPS 24
 #define MUNDO 150.0f
 
+static void renderizar_modelo(SDL_Renderer *r, pila_t *p, const modelo_t *modelo,
+                               float x, float y, float z, float rot) {
+    if (!modelo) return;
+
+    float vec[3] = {x, y, z};
+    matriz_t *mt = matriz_crear_mt(vec);
+    matriz_t *mr = matriz_crear_mz(rot);
+    matriz_t *obj = matriz_multiplicar(mt, mr);
+    matriz_destruir(mt);
+    matriz_destruir(mr);
+
+    matriz_t *cam = pila_tope(p);
+    matriz_t *final = matriz_multiplicar(cam, obj);
+    pila_apilar(p, final);
+    matriz_destruir(obj);
+
+    const float *coords = modelo_coords(modelo);
+    const size_t *lineas = modelo_lineas(modelo);
+    size_t ncoords = modelo_ncoords(modelo);
+    size_t nlineas = modelo_nlineas(modelo);
+
+    matriz_t *pts = _matriz_crear(ncoords, 3);
+    for (size_t i = 0; i < ncoords; i++) {
+        matriz_establecer(pts, i, 0, coords[3*i]);
+        matriz_establecer(pts, i, 1, coords[3*i+1]);
+        matriz_establecer(pts, i, 2, coords[3*i+2]);
+    }
+
+    matriz_t *proj = matriz_aplicar(pila_tope(p), pts);
+    matriz_destruir(pts);
+
+    for (size_t i = 0; i < 2 * nlineas; i += 2) {
+        size_t i0 = lineas[i], i1 = lineas[i+1];
+        float d0 = matriz_obtener(proj, i0, 2);
+        float d1 = matriz_obtener(proj, i1, 2);
+        if (d0 >= 1.0f && d1 >= 1.0f) {
+            float x0 = matriz_obtener(proj, i0, 0);
+            float y0 = matriz_obtener(proj, i0, 1);
+            float x1 = matriz_obtener(proj, i1, 0);
+            float y1 = matriz_obtener(proj, i1, 1);
+            int sx0 = (int)(x0 * VENTANA_ALTO/2 + VENTANA_ANCHO/2);
+            int sy0 = (int)(VENTANA_ALTO/2 - y0 * VENTANA_ALTO/2);
+            int sx1 = (int)(x1 * VENTANA_ALTO/2 + VENTANA_ANCHO/2);
+            int sy1 = (int)(VENTANA_ALTO/2 - y1 * VENTANA_ALTO/2);
+            SDL_RenderDrawLine(r, sx0, sy0, sx1, sy1);
+        }
+    }
+
+    matriz_destruir(proj);
+    matriz_destruir(pila_desapilar(p));
+}
+
 int main(int argc, char *argv[]) {
     (void)argc; (void)argv;
     SDL_Init(SDL_INIT_VIDEO);
@@ -149,10 +201,10 @@ int main(int argc, char *argv[]) {
                         tanque_iniciar_movimiento(jugador, MOV_ATRAS);
                         break;
                     case SDLK_RIGHT:
-                        tanque_iniciar_movimiento(jugador, MOV_GIRAR_DER);
+                        tanque_iniciar_movimiento(jugador, MOV_GIRAR_IZQ);
                         break;
                     case SDLK_LEFT:
-                        tanque_iniciar_movimiento(jugador, MOV_GIRAR_IZQ);
+                        tanque_iniciar_movimiento(jugador, MOV_GIRAR_DER);
                         break;
                     case ' ':
                         if (tanque_puede_disparar(jugador))
@@ -180,9 +232,93 @@ int main(int argc, char *argv[]) {
             else
                 angx += ((rand() % 2001) - 1000) / 100000.0f;
         }
+        angx *= 0.92f;
+        angz *= 0.92f;
 
+        float old_px = tanque_x(jugador), old_py = tanque_y(jugador);
+        float old_ex = tanque_x(enemigo), old_ey = tanque_y(enemigo);
         tanque_actualizar(jugador, dt);
         tanque_actualizar(enemigo, dt);
+
+        // check player collision
+        {
+            float px = tanque_x(jugador), py = tanque_y(jugador);
+            int choco = 0;
+            for (size_t i = 0; i < num_obs && !choco; i++) {
+                float dx = px - obstaculo_x(obstaculos[i]);
+                float dy = py - obstaculo_y(obstaculos[i]);
+                if (dx*dx + dy*dy < 25.0f) choco = 1;
+            }
+            if (!choco) {
+                float dx = px - old_ex;
+                float dy = py - old_ey;
+                if (dx*dx + dy*dy < 25.0f) choco = 1;
+            }
+            if (choco) tanque_set_posicion(jugador, old_px, old_py);
+        }
+
+        // check enemy collision
+        {
+            float ex = tanque_x(enemigo), ey = tanque_y(enemigo);
+            int choco = 0;
+            for (size_t i = 0; i < num_obs && !choco; i++) {
+                float dx = ex - obstaculo_x(obstaculos[i]);
+                float dy = ey - obstaculo_y(obstaculos[i]);
+                if (dx*dx + dy*dy < 25.0f) choco = 1;
+            }
+            if (!choco) {
+                float dx = ex - tanque_x(jugador);
+                float dy = ey - tanque_y(jugador);
+                if (dx*dx + dy*dy < 25.0f) choco = 1;
+            }
+            if (choco) tanque_set_posicion(enemigo, old_ex, old_ey);
+        }
+
+        // IA del enemigo
+        {
+            // calcula el angulo hacia el jugador
+            float edx = tanque_x(jugador) - tanque_x(enemigo);
+            float edy = tanque_y(jugador) - tanque_y(enemigo);
+            float ang_jug = atan2f(edy, edx);
+
+            // angulos del enemigo
+            float efrente = tanque_phi(enemigo);
+            float diff = ang_jug - efrente;
+            while (diff > M_PI) diff -= 2*M_PI;
+            while (diff < -M_PI) diff += 2*M_PI;
+
+            if (fabs(diff) <= 1.0f) {
+                // el jugador esta en el FOV, la torreta lo apunta
+                float dtor = diff - tanque_torreta(enemigo);
+                while (dtor > M_PI) dtor -= 2*M_PI;
+                while (dtor < -M_PI) dtor += 2*M_PI;
+                tanque_girar_torreta(enemigo, dtor * 3.0f * dt);
+
+                // si apunta bien, dispara
+                if (fabs(dtor) < 0.1f && tanque_puede_disparar(enemigo))
+                    tanque_disparar(enemigo);
+            } else {
+                // fuera del FOV, la torreta vuelve al centro
+                float tr = tanque_torreta(enemigo);
+                if (fabs(tr) > 0.01f)
+                    tanque_girar_torreta(enemigo, -tr * 3.0f * dt);
+            }
+
+            // movimiento aleatorio del enemigo
+            static Uint32 prox_ia = 0;
+            if (SDL_GetTicks() >= prox_ia) {
+                prox_ia = SDL_GetTicks() + 2000 + rand() % 3000;
+                int r = rand() % 4;
+                if (r == 0)
+                    tanque_iniciar_movimiento(enemigo, MOV_ADELANTE);
+                else if (r == 1)
+                    tanque_iniciar_movimiento(enemigo, MOV_ATRAS);
+                else if (r == 2)
+                    tanque_iniciar_movimiento(enemigo, MOV_GIRAR_IZQ);
+                else
+                    tanque_iniciar_movimiento(enemigo, MOV_GIRAR_DER);
+            }
+        }
 
         // build camera matrix: MPER × Mz(π/2+angz) × My(π/2-angx) × Mz(-phi) × Mt(-x, -y, -3)
         float px = tanque_x(jugador), py = tanque_y(jugador), pp = tanque_phi(jugador);
@@ -219,65 +355,14 @@ int main(int argc, char *argv[]) {
 
         pila_apilar(stack, cam);
 
-        // helper: render a modelo at a given world position+rotation
-        // assumes camera matrix is at stack top
-        #define RENDER_MODELO(m, x, y, z, rot) do { \
-            if (!(m)) break; \
-            float tv[3] = {(x), (y), (z)}; \
-            matriz_t *_mt = matriz_crear_mt(tv); \
-            matriz_t *_mr = matriz_crear_mz(rot); \
-            matriz_t *_obj = matriz_multiplicar(_mt, _mr); \
-            matriz_t *_cm = pila_tope(stack); \
-            matriz_t *_final = matriz_multiplicar(_cm, _obj); \
-            pila_apilar(stack, _final); \
-            \
-            const float *_c = modelo_coords(m); \
-            const size_t *_l = modelo_lineas(m); \
-            size_t _nv = modelo_ncoords(m); \
-            size_t _nl = modelo_nlineas(m); \
-            \
-            matriz_t *_pts = _matriz_crear(_nv, 3); \
-            for (size_t _k = 0; _k < _nv; _k++) { \
-                matriz_establecer(_pts, _k, 0, _c[3*_k]); \
-                matriz_establecer(_pts, _k, 1, _c[3*_k+1]); \
-                matriz_establecer(_pts, _k, 2, _c[3*_k+2]); \
-            } \
-            \
-            matriz_t *_proj = matriz_aplicar(pila_tope(stack), _pts); \
-            \
-            for (size_t _j = 0; _j < 2 * _nl; _j += 2) { \
-                size_t _i0 = _l[_j], _i1 = _l[_j+1]; \
-                float _d0 = matriz_obtener(_proj, _i0, 2); \
-                float _d1 = matriz_obtener(_proj, _i1, 2); \
-                if (_d0 >= 1.0f && _d1 >= 1.0f) { \
-                    float _x0 = matriz_obtener(_proj, _i0, 0); \
-                    float _y0 = matriz_obtener(_proj, _i0, 1); \
-                    float _x1 = matriz_obtener(_proj, _i1, 0); \
-                    float _y1 = matriz_obtener(_proj, _i1, 1); \
-                    int _sx0 = (int)(_x0 * VENTANA_ALTO/2 + VENTANA_ANCHO/2); \
-                    int _sy0 = (int)(VENTANA_ALTO/2 - _y0 * VENTANA_ALTO/2); \
-                    int _sx1 = (int)(_x1 * VENTANA_ALTO/2 + VENTANA_ANCHO/2); \
-                    int _sy1 = (int)(VENTANA_ALTO/2 - _y1 * VENTANA_ALTO/2); \
-                    SDL_RenderDrawLine(renderer, _sx0, _sy0, _sx1, _sy1); \
-                } \
-            } \
-            \
-            matriz_destruir(_proj); \
-            matriz_destruir(_pts); \
-            matriz_destruir(pila_desapilar(stack)); \
-            matriz_destruir(_obj); \
-            matriz_destruir(_mr); \
-            matriz_destruir(_mt); \
-        } while(0)
-
         // obstacles (white)
         SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0x00);
         for (size_t i = 0; i < num_obs; i++)
-            RENDER_MODELO(obstaculo_modelo(obstaculos[i]),
-                          obstaculo_x(obstaculos[i]),
-                          obstaculo_y(obstaculos[i]),
-                          0.0f,
-                          obstaculo_phi(obstaculos[i]));
+            renderizar_modelo(renderer, stack, obstaculo_modelo(obstaculos[i]),
+                              obstaculo_x(obstaculos[i]),
+                              obstaculo_y(obstaculos[i]),
+                              0.0f,
+                              obstaculo_phi(obstaculos[i]));
 
         // enemy tank (red): hull + turret + radar
         if (modelo_tanque && modelo_torreta) {
@@ -285,58 +370,107 @@ int main(int argc, char *argv[]) {
             float ep = tanque_phi(enemigo), et = tanque_torreta(enemigo);
 
             SDL_SetRenderDrawColor(renderer, 0xFF, 0x00, 0x00, 0x00);
-            RENDER_MODELO(modelo_tanque, ex, ey, 0.0f, ep);
+            renderizar_modelo(renderer, stack, modelo_tanque, ex, ey, 0.0f, ep);
 
             SDL_SetRenderDrawColor(renderer, 0xFF, 0x80, 0x00, 0x00);
-            RENDER_MODELO(modelo_torreta, ex, ey, 3.0f, ep + et);
+            renderizar_modelo(renderer, stack, modelo_torreta, ex, ey, 3.0f, ep + et);
 
             if (modelo_radar) {
-                float radar_x = ex + (-1.5f)*cosf(ep+et) - 0*sinf(ep+et);
-                float radar_y = ey + (-1.5f)*sinf(ep+et) + 0*cosf(ep+et);
+                float radar_x = ex + (-1.5f)*cosf(ep+et);
+                float radar_y = ey + (-1.5f)*sinf(ep+et);
                 SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0x00, 0x00);
-                RENDER_MODELO(modelo_radar, radar_x, radar_y, 3.5f, ep + et);
+                renderizar_modelo(renderer, stack, modelo_radar, radar_x, radar_y, 3.5f, ep + et);
             }
         }
 
-        // missiles (if active)
-        tanque_t *tanks[2] = {jugador, enemigo};
-        Uint8 mcols[2][3] = {{0x00, 0xFF, 0x00}, {0xFF, 0x00, 0x00}};
-        for (int ti = 0; ti < 2; ti++) {
-            if (modelo_misil && tanque_misil_activo(tanks[ti])) {
-                SDL_SetRenderDrawColor(renderer, mcols[ti][0], mcols[ti][1], mcols[ti][2], 0x00);
-                RENDER_MODELO(modelo_misil,
-                              tanque_misil_x(tanks[ti]),
-                              tanque_misil_y(tanks[ti]),
+        // missiles - player's missile
+        if (modelo_misil && tanque_misil_activo(jugador)) {
+            SDL_SetRenderDrawColor(renderer, 0x00, 0xFF, 0x00, 0x00);
+            renderizar_modelo(renderer, stack, modelo_misil,
+                              tanque_misil_x(jugador),
+                              tanque_misil_y(jugador),
                               0.0f,
-                              tanque_misil_phi(tanks[ti]));
-            }
+                              tanque_misil_phi(jugador));
         }
 
-        // background (drawn at origin with no camera offset)
+        // missiles - enemy's missile
+        if (modelo_misil && tanque_misil_activo(enemigo)) {
+            SDL_SetRenderDrawColor(renderer, 0xFF, 0x00, 0x00, 0x00);
+            renderizar_modelo(renderer, stack, modelo_misil,
+                              tanque_misil_x(enemigo),
+                              tanque_misil_y(enemigo),
+                              0.0f,
+                              tanque_misil_phi(enemigo));
+        }
+
+        // background (drawn at origin)
         if (modelo_horizonte) {
             SDL_SetRenderDrawColor(renderer, 0x80, 0x80, 0x80, 0x00);
-            RENDER_MODELO(modelo_horizonte, 0, 0, 0, 0);
+            renderizar_modelo(renderer, stack, modelo_horizonte, 0, 0, 0, 0);
         }
         if (modelo_montanas) {
             SDL_SetRenderDrawColor(renderer, 0x40, 0x40, 0x40, 0x00);
-            RENDER_MODELO(modelo_montanas, 0, 0, 0, 0);
+            renderizar_modelo(renderer, stack, modelo_montanas, 0, 0, 0, 0);
         }
         if (modelo_luna) {
             SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xCC, 0x00);
-            RENDER_MODELO(modelo_luna, 0, 0, 0, 0);
+            renderizar_modelo(renderer, stack, modelo_luna, 0, 0, 0, 0);
         }
 
-        #undef RENDER_MODELO
+        // colision de misiles (radio 3)
+        if (tanque_misil_activo(jugador)) {
+            float mx = tanque_misil_x(jugador), my = tanque_misil_y(jugador);
+            int choco = 0;
+            for (size_t i = 0; i < num_obs && !choco; i++) {
+                float dx = mx - obstaculo_x(obstaculos[i]);
+                float dy = my - obstaculo_y(obstaculos[i]);
+                if (dx*dx + dy*dy < 9.0f) choco = 1;
+            }
+            float dx = mx - tanque_x(enemigo);
+            float dy = my - tanque_y(enemigo);
+            if (dx*dx + dy*dy < 9.0f) {
+                choco = 1;
+                tanque_recibir_impacto(enemigo);
+            }
+            if (choco) tanque_desactivar_misil(jugador);
+        }
+        if (tanque_misil_activo(enemigo)) {
+            float mx = tanque_misil_x(enemigo), my = tanque_misil_y(enemigo);
+            int choco = 0;
+            for (size_t i = 0; i < num_obs && !choco; i++) {
+                float dx = mx - obstaculo_x(obstaculos[i]);
+                float dy = my - obstaculo_y(obstaculos[i]);
+                if (dx*dx + dy*dy < 9.0f) choco = 1;
+            }
+            float dx = mx - tanque_x(jugador);
+            float dy = my - tanque_y(jugador);
+            if (dx*dx + dy*dy < 9.0f) {
+                choco = 1;
+                tanque_recibir_impacto(jugador);
+            }
+            if (choco) tanque_desactivar_misil(enemigo);
+        }
+
+        // si el enemigo se queda sin vidas, aparece uno nuevo
+        if (tanque_vidas(enemigo) <= 0) {
+            tanque_destruir(enemigo);
+            enemigo = NULL;
+            while (!enemigo) {
+                float ang = (rand() % 628) / 100.0f;
+                float ex = 50.0f * cos(ang);
+                float ey = 50.0f * sin(ang);
+                enemigo = crear_tanque_enemigo(ex, ey, M_PI / 2, 3, obstaculos, num_obs);
+            }
+        }
 
         // pop camera matrix
         matriz_destruir(pila_desapilar(stack));
 
-        // crosshair
+        /* crosshair */
         SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0x00);
-        SDL_RenderDrawLine(renderer, VENTANA_ANCHO/2 - 8, VENTANA_ALTO/2,
-                           VENTANA_ANCHO/2 + 8, VENTANA_ALTO/2);
-        SDL_RenderDrawLine(renderer, VENTANA_ANCHO/2, VENTANA_ALTO/2 - 8,
-                           VENTANA_ANCHO/2, VENTANA_ALTO/2 + 8);
+        int cx = VENTANA_ANCHO/2, cy = VENTANA_ALTO/2;
+        SDL_RenderDrawLine(renderer, cx-8, cy, cx+8, cy);
+        SDL_RenderDrawLine(renderer, cx, cy-8, cx, cy+8);
         // END código del alumno
 
         SDL_RenderPresent(renderer);

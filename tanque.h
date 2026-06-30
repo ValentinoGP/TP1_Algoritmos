@@ -35,6 +35,8 @@ void tanque_girar_torreta(tanque_t *t, float delta);
 void tanque_recibir_impacto(tanque_t *t);
 bool tanque_disparar(tanque_t *t);
 void tanque_actualizar(tanque_t *t, float dt);
+void tanque_set_posicion(tanque_t *t, float x, float y);
+void tanque_desactivar_misil(tanque_t *t);
 
 void tanque_iniciar_movimiento(tanque_t *t, movimiento_e mov);
 movimiento_e tanque_movimiento(const tanque_t *t);
