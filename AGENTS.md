@@ -1,6 +1,10 @@
 # AGENTS.md — TP1_algoritmos
 
-Battle Zone (FIUBA Algoritmos) — clon del clásico Atari con SDL2 y motor 3D propio.
+Battle Zone (FIUBA Algoritmos) — clon del Atari con SDL2 y motor 3D propio.
+
+## Política de código
+
+Este repo no busca código perfecto ni sobreingeniería. Busca código **realista de un estudiante que está aprendiendo TDAs**: funcional, que compile sin warnings, que ande, pero sin vueltas raras, sin macros rebuscadas, sin patrones que un pibe de algoritmos no escribiría. Comentarios en español y sencillos.
 
 ## Build & run
 
@@ -13,79 +17,41 @@ Compile **without warnings**. On macOS: `valgrind --leak-check=full ./battlezone
 
 ## Student sections only
 
-`main.c` has four `BEGIN código del alumno` / `END código del alumno` blocks. Everything else is framework. Current line ranges:
+`main.c` has four `BEGIN código del alumno` / `END código del alumno` blocks. Everything else is framework.
 
 | Section | Lines | Purpose |
 |---------|-------|---------|
-| Init    | 84–183 | STL → `lista_modelos` → create game objects |
-| Event   | 194–215 | Keyboard input |
-| Draw    | 222–344 | Per-frame update + 3D render |
-| Cleanup | 358–373 | Free all dynamic memory |
+| Init    | 84–183 | Cargar STL, crear obstáculos, tanques, pila |
+| Event   | 194–215 | Input del jugador |
+| Draw    | 222–474 | Física, IA, colisiones, render 3D |
+| Cleanup | 488–503 | Liberar memoria |
 
-Rendering is done via `renderizar_modelo` (static helper at lines 19–59, outside student sections).
+Render 3D via `renderizar_modelo` (helper static, líneas 19–59, fuera del alumno).
 
-## Implementation state
+## Implementado vs. pendiente
 
-**Already implemented:** STL loading, model lookup, obstacle/tank creation, player movement (timed 0.5s), missile launch & lifetime, enemy tank creation, camera matrix, full 3D wireframe rendering, crosshair, background (HORIZONTE/MONTANAS/LUNA).
+**Hecho:** carga de modelos, obstáculos, tanques, movimiento del jugador (timer 0.5s), misiles, cámara 3D, wireframe, crosshair, fondo, colisiones (radio 5 mov, radio 3 misiles), muerte y respawn del enemigo, IA enemiga (torreta trackea dentro de 1 rad, dispara si apunta a < 0.1 rad, movimiento aleatorio).
 
-**Still TODO** (per `guia.md`):
-- Collisions: movement radius 5, missile radius 3
-- Enemy AI: turret tracking, firing, random movement
-- Animations: `#` model for player hit, `RESTO1`/`RESTO2` debris for enemy destruction
-- HUD: lives (`*`), score, direction indicator text
-- Score, game over state
+**Falta:**
+- Animaciones: `#` para hit al jugador, `RESTO1`/`RESTO2` para muerte del enemigo
+- HUD: vidas (`*`), puntaje, indicador de dirección
+- Score / game over
 
-## World coordinates
+## Referencia rápida
 
-**Game world is 2D:** x,y ∈ `[-150, 150]`. Player starts at `(0, 0)` facing `π/2` (+Y).
-- 50 obstacles at random x,y, random rotation
-- Enemy spawns 50 units from player, not overlapping any obstacle (distance ≥ 5)
+- **Mundo 2D:** x,y ∈ `[-150, 150]`. Player empieza en `(0,0)` mirando `π/2` (+Y). 50 obstáculos aleatorios. Enemigo spawnea a 50 u. del player sin superponerse a obstáculos.
+- **Modelos:** `CUBO1-3`/`PIRAMIDE1-3` (obstáculos), `TANQUE`/`TORRETA`/`RADAR` (tanque), `MISIL`, `HORIZONTE`/`MONTANAS`/`LUNA` (fondo), `A-Z`/`0-9`/` ` (HUD), `*`/`-`/`+`/`#` (iconos), `RESTO1`/`RESTO2` (debris).
+- **Teclas:** Up/Down mover, Left/Right girar, Space disparar (cooldown 2s). Torreta del player fija.
+- **Cámara:** `cam = I × MPER × Mz(π/2+angz) × My(π/2-angx) × Mz(-phi) × Mt(-x, -y, -3)` con head-bob (`angx`/`angz` decaen ×0.92 por frame).
 
-## Model naming
+## Modules
 
-From `modelos.stl` — classify by `modelo_nombre`:
-
-| Category | Models | Usage |
-|----------|--------|-------|
-| Obstacles | `CUBO1`–`CUBO3`, `PIRAMIDE1`–`PIRAMIDE3` | 50 random obstacles |
-| Tank hull | `TANQUE` | One per tank |
-| Turret | `TORRETA` | On tank, rotates independently |
-| Radar | `RADAR` | On turret |
-| Missile | `MISIL` | Projectile |
-| Background | `HORIZONTE`, `MONTANAS`, `LUNA` | 3D skybox (drawn at origin) |
-| HUD chars | `A`–`Z`, `0`–`9`, ` ` (space) | Score, messages |
-| HUD icons | `*` (lives), `-` / `+` (crosshair), `#` (destruction) | 2D overlay |
-| Debris | `RESTO1`, `RESTO2` | Enemy destruction animation |
-
-## Key map
-
-| Key | Action |
-|-----|--------|
-| Up / Down | Move forward / backward (7 m/s, 0.5s timer) |
-| Left / Right | Rotate hull (0.36 rad/s, 0.5s timer) |
-| Space | Fire (2s cooldown) |
-
-**Player turret is fixed** — no A/D rotation. Holding a key re-triggers the 0.5s timer.
-
-## 3D rendering pipeline
-
-Camera matrix (built per-frame in Draw, single push):
-
-```
-cam = I × MPER × Mz(π/2 + angz) × My(π/2 - angx) × Mz(-phi) × Mt(-x, -y, -3)
-```
-
-Where `(x, y, phi)` = player position/rotation, `angx`/`angz` = head-bob (±0.00001 random during movement).
-
-`renderizar_modelo` function (framework, outside student sections): pushes `cam × Mt(x,y,z) × Mz(rot)`, applies via `matriz_aplicar` (returns 3‑component `(x', y', depth)`), renders lines with depth ≥ 1, pops everything.
-
-Modules already in the repo: `matriz` (EJ1), `matriz_aplicar` (returns 3 cols — depth in column 2 = w'), `pila` (Cátedra stack), `lista` (Cátedra list — unused in main.c, models kept in linked list via `struct nodo_m`).
+`matriz` (EJ1), `matriz_aplicar` (EJ3, devuelve 3 cols, depth en col 2 = w'), `pila` (Cátedra), `lista` (Cátedra, no se usa en main.c). `_matriz_crear` es el allocator interno, usado en `renderizar_modelo`.
 
 ## Gotchas
 
-- `tanque.c:5–7`: `#ifndef M_PI #define M_PI 3.14159265358979323846` (standard value, guarded).
-- `modelo_crear` deep-copies arrays; caller can `free(coords)`/`free(lineas)` immediately.
-- All types are opaque — use accessor functions.
-- `guia.md` has per-section instructions but line numbers are stale — use table above.
-- `_matriz_crear` (underscore prefix) is the internal allocator, used directly in `renderizar_modelo`.
-- Screen projection in `renderizar_modelo`: `sx = (int)(x' * H/2 + W/2)`, `sy = (int)(H/2 - y' * H/2)`.
+- `tanque.c:5–7`: `#ifndef M_PI #define M_PI 3.14159…` con guarda.
+- `modelo_crear` copia los arrays; el caller puede `free` coords/lineas apenas crea el modelo.
+- Todos los tipos son opacos — usar accessors.
+- `guia.md` tiene instrucciones viejas; los line numbers exactos están arriba.
+- Proyección en `renderizar_modelo`: `sx = (int)(x' * H/2 + W/2)`, `sy = (int)(H/2 - y' * H/2)`.
