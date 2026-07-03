@@ -89,8 +89,12 @@ bool tanque_disparar(tanque_t *t) {
 }
 
 void tanque_iniciar_movimiento(tanque_t *t, movimiento_e mov) {
+    tanque_iniciar_movimiento_tiempo(t, mov, 0.5f);
+}
+
+void tanque_iniciar_movimiento_tiempo(tanque_t *t, movimiento_e mov, float tiempo) {
     t->mov_actual = mov;
-    t->tiempo_movimiento = 0.5f;
+    t->tiempo_movimiento = tiempo;
 }
 
 movimiento_e tanque_movimiento(const tanque_t *t) {

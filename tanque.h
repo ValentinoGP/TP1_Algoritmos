@@ -39,6 +39,7 @@ void tanque_set_posicion(tanque_t *t, float x, float y);
 void tanque_desactivar_misil(tanque_t *t);
 
 void tanque_iniciar_movimiento(tanque_t *t, movimiento_e mov);
+void tanque_iniciar_movimiento_tiempo(tanque_t *t, movimiento_e mov, float tiempo);
 movimiento_e tanque_movimiento(const tanque_t *t);
 
 tanque_t *crear_tanque_enemigo(float x, float y, float phi, int vidas,
