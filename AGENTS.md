@@ -3,28 +3,31 @@
 ## Build & run
 
 ```sh
-make          # gcc -g -Wall -Wextra -pedantic -lSDL2 -lm
+make          # gcc -g -Wall -Wextra -pedantic $(sdl2-config --cflags --libs) -lm
 make clean    # rm -f battlezone
 ./battlezone  # requires modelos.stl in CWD
 ```
 
 - No test framework, no linter, no typecheck.
 - Single binary, flat directory, no header-only units.
-- Code between `BEGIN código del alumno` / `END código del alumno` markers.
+- Code between `BEGIN código del alumno` / `END código del alumno` markers in `main.c`.
+- `EJ1.c` `EJ2.c` `EJ3.c` are standalone exercises **not compiled by `make`**.
 
 ## Architecture
 
 | File | Role |
 |------|------|
-| `main.c` | Game loop: init, events, physics, render, cleanup |
+| `main.c` | Game loop: init, events, physics (incl. enemy AI & missile collision), render, cleanup |
 | `modelo.c/h` | Opaque 3D wireframe model type (copies arrays on create) |
 | `matriz.c/h` | Opaque 4×4 matrix algebra (row-major, homogenous coords) |
-| `tanque.c/h` | Tank logic: position, heading, turret, missile, AI |
+| `tanque.c/h` | Tank state & movement mechanics (position, heading, turret, missile flight). *Strategic AI is in `main.c:302-381`*, not here |
 | `obstaculo.c/h` | Static obstacle (position + model pointer, not owned) |
 | `stl.c/h` | Binary STL reader (cátedra format, not standard STL) |
 | `pila.c/h` | Generic `void*` stack (used for transform matrix stack) |
 | `lista.c/h` | Generic linked list (not used in `main.c`) |
-| `modelos.stl` | Binary file with all wireframe models |
+| `modelos.stl` | Binary file with all 3D models (TANQUE, TORRETA, RADAR, MISIL, HORIZONTE, MONTANA, LUNA, CUBO1-3, PIRAMIDE1-3, letters A-Z, digits 0-9, `*`, `#`, RESTO1, RESTO2) |
+
+See `guia.md` for detailed architecture walkthrough.
 
 ## Gotchas
 

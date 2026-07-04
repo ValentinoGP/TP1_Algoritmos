@@ -5,6 +5,8 @@
 #include "stl.h"
 #include "matriz.h"
 #include "pila.h"
+#include "lista.h"
+#include "cola.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,7 +31,7 @@ static void renderizar_modelo(SDL_Renderer *r, pila_t *p, const modelo_t *modelo
     matriz_destruir(mt);
     matriz_destruir(mr);
 
-    matriz_t *cam = pila_tope(p);
+    matriz_t *cam = pila_ver_tope(p);
     matriz_t *final = matriz_multiplicar(cam, obj);
     pila_apilar(p, final);
     matriz_destruir(obj);
@@ -47,7 +49,7 @@ static void renderizar_modelo(SDL_Renderer *r, pila_t *p, const modelo_t *modelo
         matriz_establecer(pts, i, 2, coords[3*i+2]);
     }
 
-    matriz_t *proj = matriz_aplicar(pila_tope(p), pts);
+    matriz_t *proj = matriz_aplicar(pila_ver_tope(p), pts);
     matriz_destruir(pts);
 
     for (size_t i = 0; i < 2 * max_lineas; i += 2) {
@@ -85,8 +87,8 @@ int main(int argc, char *argv[]) {
     int dormir = 0;
 
     // BEGIN código del alumno
-    struct nodo_m { struct nodo_m *sig; modelo_t *modelo; };
-    struct nodo_m *lista_modelos = NULL;
+    lista_t *lista_modelos = lista_crear();
+    cola_t *cola_modelos = cola_crear();
 
     FILE *f = fopen("modelos.stl", "rb");
     if (f) {
@@ -107,12 +109,7 @@ int main(int argc, char *argv[]) {
             free(coords);
             free(lineas);
             if (m) {
-                struct nodo_m *n = malloc(sizeof(struct nodo_m));
-                if (n) {
-                    n->modelo = m;
-                    n->sig = lista_modelos;
-                    lista_modelos = n;
-                }
+                cola_encolar(cola_modelos, m);
             }
         }
         fclose(f);
@@ -133,33 +130,42 @@ int main(int argc, char *argv[]) {
     bool game_over = false;
     float hit_timer = 0, resto_timer = 0;
     float resto_x = 0, resto_y = 0;
-    int modelos_cargados = 0;
-    for (struct nodo_m *n = lista_modelos; n; n = n->sig) {
-        modelos_cargados++;
-        const char *name = modelo_nombre(n->modelo);
-        if      (strcmp(name, "TANQUE") == 0)    modelo_tanque = n->modelo;
-        else if (strcmp(name, "TORRETA") == 0)   modelo_torreta = n->modelo;
-        else if (strcmp(name, "RADAR") == 0)     modelo_radar = n->modelo;
-        else if (strcmp(name, "MISIL") == 0)     modelo_misil = n->modelo;
-        else if (strcmp(name, "HORIZONTE") == 0) modelo_horizonte = n->modelo;
-        else if (strcmp(name, "MONTANA") == 0)  modelo_montanas = n->modelo;
-        else if (strcmp(name, "LUNA") == 0)      modelo_luna = n->modelo;
-        else if (strcmp(name, "CUBO1") == 0)     obs_models[0] = n->modelo;
-        else if (strcmp(name, "CUBO2") == 0)     obs_models[1] = n->modelo;
-        else if (strcmp(name, "CUBO3") == 0)     obs_models[2] = n->modelo;
-        else if (strcmp(name, "PIRAMIDE1") == 0) obs_models[3] = n->modelo;
-        else if (strcmp(name, "PIRAMIDE2") == 0) obs_models[4] = n->modelo;
-        else if (strcmp(name, "PIRAMIDE3") == 0) obs_models[5] = n->modelo;
-        else if (strlen(name) == 1 && name[0] >= 'A' && name[0] <= 'Z')
-            modelo_letras[name[0] - 'A'] = n->modelo;
-        else if (strlen(name) == 1 && name[0] >= '0' && name[0] <= '9')
-            modelo_numeros[name[0] - '0'] = n->modelo;
-        else if (strcmp(name, "*") == 0) modelo_star = n->modelo;
-        else if (strcmp(name, "#") == 0) modelo_hash = n->modelo;
-        else if (strcmp(name, "RESTO1") == 0) modelo_resto1 = n->modelo;
-        else if (strcmp(name, "RESTO2") == 0) modelo_resto2 = n->modelo;
+
+    while (!cola_esta_vacia(cola_modelos)) {
+        modelo_t *m = cola_desencolar(cola_modelos);
+        lista_insertar_ultimo(lista_modelos, m);
     }
-    if (modelos_cargados == 0) fprintf(stderr, "ERROR: no se cargaron modelos desde modelos.stl\n");
+    cola_destruir(cola_modelos, NULL);
+
+    lista_iter_t *it = lista_iter_crear(lista_modelos);
+    while (!lista_iter_al_final(it)) {
+        modelo_t *m = lista_iter_ver_actual(it);
+        const char *name = modelo_nombre(m);
+        if      (strcmp(name, "TANQUE") == 0)    modelo_tanque = m;
+        else if (strcmp(name, "TORRETA") == 0)   modelo_torreta = m;
+        else if (strcmp(name, "RADAR") == 0)     modelo_radar = m;
+        else if (strcmp(name, "MISIL") == 0)     modelo_misil = m;
+        else if (strcmp(name, "HORIZONTE") == 0) modelo_horizonte = m;
+        else if (strcmp(name, "MONTANA") == 0)  modelo_montanas = m;
+        else if (strcmp(name, "LUNA") == 0)      modelo_luna = m;
+        else if (strcmp(name, "CUBO1") == 0)     obs_models[0] = m;
+        else if (strcmp(name, "CUBO2") == 0)     obs_models[1] = m;
+        else if (strcmp(name, "CUBO3") == 0)     obs_models[2] = m;
+        else if (strcmp(name, "PIRAMIDE1") == 0) obs_models[3] = m;
+        else if (strcmp(name, "PIRAMIDE2") == 0) obs_models[4] = m;
+        else if (strcmp(name, "PIRAMIDE3") == 0) obs_models[5] = m;
+        else if (strlen(name) == 1 && name[0] >= 'A' && name[0] <= 'Z')
+            modelo_letras[name[0] - 'A'] = m;
+        else if (strlen(name) == 1 && name[0] >= '0' && name[0] <= '9')
+            modelo_numeros[name[0] - '0'] = m;
+        else if (strcmp(name, "*") == 0) modelo_star = m;
+        else if (strcmp(name, "#") == 0) modelo_hash = m;
+        else if (strcmp(name, "RESTO1") == 0) modelo_resto1 = m;
+        else if (strcmp(name, "RESTO2") == 0) modelo_resto2 = m;
+        lista_iter_avanzar(it);
+    }
+    lista_iter_destruir(it);
+    if (lista_largo(lista_modelos) == 0) fprintf(stderr, "ERROR: no se cargaron modelos desde modelos.stl\n");
 
     
     size_t num_obs = 50;
@@ -559,7 +565,7 @@ int main(int argc, char *argv[]) {
                 matriz_destruir(mrz);
                 matriz_destruir(mry);
                 matriz_destruir(obj1);
-                matriz_t *cam = pila_tope(stack);
+                matriz_t *cam = pila_ver_tope(stack);
                 matriz_t *final = matriz_multiplicar(cam, obj);
                 pila_apilar(stack, final);
                 matriz_destruir(obj);
@@ -574,7 +580,7 @@ int main(int argc, char *argv[]) {
                     matriz_establecer(pts, i, 1, coords[3*i+1]);
                 for (size_t i = 0; i < ncoords; i++)
                     matriz_establecer(pts, i, 2, coords[3*i+2]);
-                matriz_t *proj = matriz_aplicar(pila_tope(stack), pts);
+                matriz_t *proj = matriz_aplicar(pila_ver_tope(stack), pts);
                 matriz_destruir(pts);
                 for (size_t i = 0; i < 2 * nlineas; i += 2) {
                     size_t i0 = lineas[i], i1 = lineas[i+1];
@@ -729,21 +735,13 @@ int main(int argc, char *argv[]) {
     }
 
     // BEGIN código del alumno
-    {
-        struct nodo_m *n = lista_modelos;
-        while (n) {
-            struct nodo_m *sig = n->sig;
-            modelo_destruir(n->modelo);
-            free(n);
-            n = sig;
-        }
-    }
+    lista_destruir(lista_modelos, (void (*)(void *))modelo_destruir);
     for (size_t i = 0; i < num_obs; i++)
         obstaculo_destruir(obstaculos[i]);
     tanque_destruir(jugador);
     tanque_destruir(enemigo);
     matriz_destruir(pila_desapilar(stack));
-    pila_destruir(stack);
+    pila_destruir(stack, NULL);
     // END código del alumno
 
     SDL_DestroyRenderer(renderer);
