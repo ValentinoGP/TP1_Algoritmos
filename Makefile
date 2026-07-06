@@ -1,16 +1,33 @@
 CC = gcc
-SDL_CFLAGS := $(shell sdl2-config --cflags | sed 's|/SDL2||')
-CFLAGS = -g -Wall -Wextra -pedantic $(SDL_CFLAGS)
-LDFLAGS = $(shell sdl2-config --libs) -lm
-SRCS = main.c modelo.c obstaculo.c tanque.c stl.c matriz.c pila.c lista.c cola.c
-TARGET = battlezone
 
-.PHONY: all clean
+CFLAGS = -Wall -Werror -std=c99 -pedantic -g \
+         $(shell sdl2-config --cflags | sed 's|/SDL2||')
 
-all: $(TARGET)
+LDLIBS = $(shell sdl2-config --libs) -lm
 
-$(TARGET): $(SRCS)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+OBJS = matriz.o modelo.o obstaculo.o tanque.o stl.o pila.o lista.o cola.o main.o
+
+PROGRAM = battlezone
+
+all: $(PROGRAM)
+
+$(PROGRAM): $(OBJS)
+	$(CC) $(CFLAGS) $(OBJS) -o $@ $(LDLIBS)
+
+matriz.o: matriz.c matriz.h
+modelo.o: modelo.c modelo.h matriz.h
+obstaculo.o: obstaculo.c obstaculo.h modelo.h
+tanque.o: tanque.c tanque.h obstaculo.h modelo.h
+stl.o: stl.c stl.h
+pila.o: pila.c pila.h
+lista.o: lista.c lista.h
+cola.o: cola.c cola.h
+main.o: main.c modelo.h obstaculo.h tanque.h stl.h matriz.h pila.h lista.h cola.h
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(TARGET)
+	rm -f $(OBJS) $(PROGRAM)
+
+.PHONY: all clean

@@ -17,7 +17,9 @@
 #define VENTANA_ALTO 768
 #define JUEGO_FPS 24
 #define MUNDO 150.0f
+#ifndef M_PI
 #define M_PI 3.14
+#endif
 
 static void renderizar_modelo(SDL_Renderer *r, pila_t *p, const modelo_t *modelo,
                                float x, float y, float z, float rot,
