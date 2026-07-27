@@ -5,7 +5,7 @@ CFLAGS = -Wall -Werror -std=c99 -pedantic -g \
 
 LDLIBS = $(shell sdl2-config --libs) -lm
 
-OBJS = matriz.o modelo.o obstaculo.o tanque.o stl.o pila.o lista.o cola.o main.o
+OBJS = matriz.o modelo.o obstaculo.o tanque.o stl.o pila.o lista.o cola.o juego.o main.o
 
 PROGRAM = battlezone
 
@@ -22,7 +22,8 @@ stl.o: stl.c stl.h
 pila.o: pila.c pila.h
 lista.o: lista.c lista.h
 cola.o: cola.c cola.h
-main.o: main.c modelo.h obstaculo.h tanque.h stl.h matriz.h pila.h lista.h cola.h
+juego.o: juego.c juego.h modelo.h obstaculo.h tanque.h stl.h matriz.h pila.h lista.h cola.h
+main.o: main.c juego.h modelo.h obstaculo.h matriz.h pila.h
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@

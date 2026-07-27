@@ -93,6 +93,7 @@ void tanque_iniciar_movimiento(tanque_t *t, movimiento_e mov) {
 }
 
 void tanque_iniciar_movimiento_tiempo(tanque_t *t, movimiento_e mov, float tiempo) {
+    if (t->mov_actual == mov && t->tiempo_movimiento > 0) return;
     t->mov_actual = mov;
     t->tiempo_movimiento = tiempo;
 }
@@ -105,22 +106,25 @@ void tanque_actualizar(tanque_t *t, float dt) {
     if (t->enfriamiento > 0) t->enfriamiento -= dt;
 
     if (t->tiempo_movimiento > 0) {
+        float efectivo = dt;
+        if (t->tiempo_movimiento < efectivo)
+            efectivo = t->tiempo_movimiento;
         t->tiempo_movimiento -= dt;
         switch (t->mov_actual) {
             case MOV_ADELANTE:
-                t->x += 7.0f * cos(t->phi) * dt;
-                t->y += 7.0f * sin(t->phi) * dt;
+                t->x += 7.0f * cos(t->phi) * efectivo;
+                t->y += 7.0f * sin(t->phi) * efectivo;
                 break;
             case MOV_ATRAS:
-                t->x -= 7.0f * cos(t->phi) * dt;
-                t->y -= 7.0f * sin(t->phi) * dt;
+                t->x -= 7.0f * cos(t->phi) * efectivo;
+                t->y -= 7.0f * sin(t->phi) * efectivo;
                 break;
             case MOV_GIRAR_IZQ:
-                t->phi -= 0.36f * dt;
+                t->phi -= 0.36f * efectivo;
                 if (t->phi <= -M_PI) t->phi += 2 * M_PI;
                 break;
             case MOV_GIRAR_DER:
-                t->phi += 0.36f * dt;
+                t->phi += 0.36f * efectivo;
                 if (t->phi > M_PI) t->phi -= 2 * M_PI;
                 break;
             default: break;

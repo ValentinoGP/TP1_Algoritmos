@@ -28,4 +28,6 @@ bool matriz_agregar_fila(matriz_t *matriz, const float fila[]);
 
 matriz_t *matriz_aplicar(const matriz_t *transform, const matriz_t *puntos);
 
+const float *matriz_datos(const matriz_t *matriz);
+
 #endif

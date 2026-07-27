@@ -145,3 +145,7 @@ matriz_t *matriz_aplicar(const matriz_t *transform, const matriz_t *puntos) {
 
     return r;
 }
+
+const float *matriz_datos(const matriz_t *matriz) {
+    return matriz->m;
+}
