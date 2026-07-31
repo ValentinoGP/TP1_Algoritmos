@@ -15,10 +15,6 @@ struct tanque {
     float enfriamiento;
     float tiempo_movimiento;
     movimiento_e mov_actual;
-    bool misil_activo;
-    float misil_x, misil_y;
-    float misil_phi;
-    float misil_tiempo;
 };
 
 tanque_t *tanque_crear(float x, float y, float phi, int vidas) {
@@ -32,7 +28,6 @@ tanque_t *tanque_crear(float x, float y, float phi, int vidas) {
     t->enfriamiento = 0;
     t->tiempo_movimiento = 0;
     t->mov_actual = MOV_NINGUNO;
-    t->misil_activo = false;
     return t;
 }
 
@@ -44,18 +39,10 @@ float tanque_phi(const tanque_t *t)            { return t->phi; }
 int   tanque_vidas(const tanque_t *t)          { return t->vidas; }
 float tanque_torreta(const tanque_t *t)        { return t->torreta; }
 bool  tanque_puede_disparar(const tanque_t *t) { return t->enfriamiento <= 0; }
-bool  tanque_misil_activo(const tanque_t *t)   { return t->misil_activo; }
-float tanque_misil_x(const tanque_t *t)        { return t->misil_x; }
-float tanque_misil_y(const tanque_t *t)        { return t->misil_y; }
-float tanque_misil_phi(const tanque_t *t)      { return t->misil_phi; }
 
 void tanque_set_posicion(tanque_t *t, float x, float y) {
     t->x = x;
     t->y = y;
-}
-
-void tanque_desactivar_misil(tanque_t *t) {
-    t->misil_activo = false;
 }
 
 void tanque_girar(tanque_t *t, float delta_phi) {
@@ -78,12 +65,7 @@ void tanque_girar_torreta(tanque_t *t, float delta) {
 void tanque_recibir_impacto(tanque_t *t) { t->vidas--; }
 
 bool tanque_disparar(tanque_t *t) {
-    if (t->enfriamiento > 0 || t->misil_activo) return false;
-    t->misil_activo = true;
-    t->misil_x = t->x;
-    t->misil_y = t->y;
-    t->misil_phi = t->phi + t->torreta;
-    t->misil_tiempo = 2.0f;
+    if (t->enfriamiento > 0) return false;
     t->enfriamiento = 2.0f;
     return true;
 }
@@ -93,7 +75,6 @@ void tanque_iniciar_movimiento(tanque_t *t, movimiento_e mov) {
 }
 
 void tanque_iniciar_movimiento_tiempo(tanque_t *t, movimiento_e mov, float tiempo) {
-    if (t->mov_actual == mov && t->tiempo_movimiento > 0) return;
     t->mov_actual = mov;
     t->tiempo_movimiento = tiempo;
 }
@@ -131,13 +112,6 @@ void tanque_actualizar(tanque_t *t, float dt) {
         }
         if (t->tiempo_movimiento <= 0)
             t->mov_actual = MOV_NINGUNO;
-    }
-
-    if (t->misil_activo) {
-        t->misil_x += 24.0f * cos(t->misil_phi) * dt;
-        t->misil_y += 24.0f * sin(t->misil_phi) * dt;
-        t->misil_tiempo -= dt;
-        if (t->misil_tiempo <= 0) t->misil_activo = false;
     }
 }
 
