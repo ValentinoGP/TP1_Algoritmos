@@ -70,11 +70,11 @@ static bool hay_colision(const juego_t *juego, float x, float y,
     for (size_t i = 0; i < juego->cantidad_obstaculos; i++) {
         float distancia_x = x - obstaculo_x(juego->obstaculos[i]);
         float distancia_y = y - obstaculo_y(juego->obstaculos[i]);
-        if (distancia_x*distancia_x + distancia_y*distancia_y < 36.0f) return true;
+        if (distancia_x*distancia_x + distancia_y*distancia_y < 25.0f) return true;
     }
     float distancia_x = x - otro_x;
     float distancia_y = y - otro_y;
-    return distancia_x*distancia_x + distancia_y*distancia_y < 36.0f;
+    return distancia_x*distancia_x + distancia_y*distancia_y < 25.0f;
 }
 
 static bool misil_impacta(juego_t *juego, misil_t *misil, tanque_t *objetivo) {
@@ -221,11 +221,6 @@ bool juego_tratar_evento(juego_t *juego, const SDL_Event *evento) {
     return true;
 }
 
-static void reaparecer_enemigo(juego_t *juego) {
-    tanque_destruir(juego->enemigo);
-    crear_enemigo_aleatorio(juego);
-}
-
 void juego_actualizar(juego_t *juego) {
     float delta_tiempo = (SDL_GetTicks() - juego->tick_anterior) / 1000.0f;
     if (delta_tiempo > 0.1f) delta_tiempo = 0.1f;
@@ -248,83 +243,91 @@ void juego_actualizar(juego_t *juego) {
         juego->angz *= 0.92f;
 
         float jugador_x_anterior = tanque_x(juego->jugador), jugador_y_anterior = tanque_y(juego->jugador);
-        float enemigo_x_anterior = tanque_x(juego->enemigo), enemigo_y_anterior = tanque_y(juego->enemigo);
         tanque_actualizar(juego->jugador, delta_tiempo);
-        tanque_actualizar(juego->enemigo, delta_tiempo);
         misil_actualizar(juego->misil_jugador, delta_tiempo);
         misil_actualizar(juego->misil_enemigo, delta_tiempo);
 
-        float jugador_x = tanque_x(juego->jugador), jugador_y = tanque_y(juego->jugador);
-        if (hay_colision(juego, jugador_x, jugador_y, enemigo_x_anterior, enemigo_y_anterior))
-            tanque_set_posicion(juego->jugador, jugador_x_anterior, jugador_y_anterior);
+        if (juego->enemigo) {
+            float enemigo_x_anterior = tanque_x(juego->enemigo), enemigo_y_anterior = tanque_y(juego->enemigo);
+            tanque_actualizar(juego->enemigo, delta_tiempo);
 
-        float enemigo_x = tanque_x(juego->enemigo), enemigo_y = tanque_y(juego->enemigo);
-        if (hay_colision(juego, enemigo_x, enemigo_y, tanque_x(juego->jugador),
-                         tanque_y(juego->jugador)))
-            tanque_set_posicion(juego->enemigo, enemigo_x_anterior, enemigo_y_anterior);
+            float jugador_x = tanque_x(juego->jugador), jugador_y = tanque_y(juego->jugador);
+            if (hay_colision(juego, jugador_x, jugador_y, enemigo_x_anterior, enemigo_y_anterior))
+                tanque_set_posicion(juego->jugador, jugador_x_anterior, jugador_y_anterior);
 
-        float enemigo_phi = tanque_phi(juego->enemigo);
-        float distancia_x = tanque_x(juego->jugador) - enemigo_x;
-        float distancia_y = tanque_y(juego->jugador) - enemigo_y;
-        float angulo_jugador = atan2f(distancia_y, distancia_x);
-        float diferencia = angulo_jugador - enemigo_phi;
-        while (diferencia > M_PI) diferencia -= 2*M_PI;
-        while (diferencia < -M_PI) diferencia += 2*M_PI;
+            float enemigo_x = tanque_x(juego->enemigo), enemigo_y = tanque_y(juego->enemigo);
+            if (hay_colision(juego, enemigo_x, enemigo_y, tanque_x(juego->jugador),
+                             tanque_y(juego->jugador)))
+                tanque_set_posicion(juego->enemigo, enemigo_x_anterior, enemigo_y_anterior);
 
-        if (tanque_movimiento(juego->enemigo) == MOV_NINGUNO) {
-            if ((rand() % FPS_JUEGO) == 0) {
-                if (rand() % 2 == 0) {
-                    float duracion = (rand() % 3001) / 1000.0f;
-                    if (diferencia > 0)
-                        tanque_iniciar_movimiento_tiempo(juego->enemigo, MOV_GIRAR_DER, duracion);
+            float enemigo_phi = tanque_phi(juego->enemigo);
+            float distancia_x = tanque_x(juego->jugador) - enemigo_x;
+            float distancia_y = tanque_y(juego->jugador) - enemigo_y;
+            float angulo_jugador = atan2f(distancia_y, distancia_x);
+            float diferencia = angulo_jugador - enemigo_phi;
+            while (diferencia > M_PI) diferencia -= 2*M_PI;
+            while (diferencia < -M_PI) diferencia += 2*M_PI;
+
+            if (tanque_movimiento(juego->enemigo) == MOV_NINGUNO) {
+                if ((rand() % FPS_JUEGO) == 0) {
+                    if (rand() % 2 == 0) {
+                        float duracion = (rand() % 3001) / 1000.0f;
+                        if (diferencia > 0)
+                            tanque_iniciar_movimiento_tiempo(juego->enemigo, MOV_GIRAR_DER, duracion);
+                        else
+                            tanque_iniciar_movimiento_tiempo(juego->enemigo, MOV_GIRAR_IZQ, duracion);
+                    } else {
+                        float duracion = ((float)(rand() % 4001) - 1000.0f) / 1000.0f;
+                        if (duracion < 0)
+                            tanque_iniciar_movimiento_tiempo(juego->enemigo, MOV_ATRAS, -duracion);
+                        else
+                            tanque_iniciar_movimiento_tiempo(juego->enemigo, MOV_ADELANTE, duracion);
+                    }
+                }
+            }
+
+            if (fabs(diferencia) <= 1.0f) {
+                float diferencia_torreta = diferencia - tanque_torreta(juego->enemigo);
+                while (diferencia_torreta > M_PI) diferencia_torreta -= 2*M_PI;
+                while (diferencia_torreta < -M_PI) diferencia_torreta += 2*M_PI;
+                if (fabs(diferencia_torreta) > 0.01f) {
+                    if (diferencia_torreta > 0)
+                        tanque_girar_torreta(juego->enemigo, 0.12f * delta_tiempo);
                     else
-                        tanque_iniciar_movimiento_tiempo(juego->enemigo, MOV_GIRAR_IZQ, duracion);
-                } else {
-                    float duracion = ((float)(rand() % 4001) - 1000.0f) / 1000.0f;
-                    if (duracion < 0)
-                        tanque_iniciar_movimiento_tiempo(juego->enemigo, MOV_ATRAS, -duracion);
+                        tanque_girar_torreta(juego->enemigo, -0.12f * delta_tiempo);
+                }
+                if (!misil_activo(juego->misil_enemigo) && fabs(diferencia_torreta) < 0.1f &&
+                    tanque_disparar(juego->enemigo))
+                    misil_lanzar(juego->misil_enemigo, enemigo_x, enemigo_y,
+                                 enemigo_phi + tanque_torreta(juego->enemigo));
+            } else {
+                float torreta = tanque_torreta(juego->enemigo);
+                if (fabs(torreta) > 0.01f) {
+                    if (torreta > 0)
+                        tanque_girar_torreta(juego->enemigo, -0.24f * delta_tiempo);
                     else
-                        tanque_iniciar_movimiento_tiempo(juego->enemigo, MOV_ADELANTE, duracion);
+                        tanque_girar_torreta(juego->enemigo, 0.24f * delta_tiempo);
                 }
             }
         }
 
-        if (fabs(diferencia) <= 1.0f) {
-            float diferencia_torreta = diferencia - tanque_torreta(juego->enemigo);
-            while (diferencia_torreta > M_PI) diferencia_torreta -= 2*M_PI;
-            while (diferencia_torreta < -M_PI) diferencia_torreta += 2*M_PI;
-            if (fabs(diferencia_torreta) > 0.01f) {
-                if (diferencia_torreta > 0)
-                    tanque_girar_torreta(juego->enemigo, 0.12f * delta_tiempo);
-                else
-                    tanque_girar_torreta(juego->enemigo, -0.12f * delta_tiempo);
-            }
-            if (!misil_activo(juego->misil_enemigo) && fabs(diferencia_torreta) < 0.1f &&
-                tanque_disparar(juego->enemigo))
-                misil_lanzar(juego->misil_enemigo, enemigo_x, enemigo_y,
-                             enemigo_phi + tanque_torreta(juego->enemigo));
-        } else {
-            float torreta = tanque_torreta(juego->enemigo);
-            if (fabs(torreta) > 0.01f) {
-                if (torreta > 0)
-                    tanque_girar_torreta(juego->enemigo, -0.24f * delta_tiempo);
-                else
-                    tanque_girar_torreta(juego->enemigo, 0.24f * delta_tiempo);
-            }
-        }
-
-        misil_impacta(juego, juego->misil_jugador, juego->enemigo);
+        if (juego->enemigo)
+            misil_impacta(juego, juego->misil_jugador, juego->enemigo);
         if (misil_impacta(juego, juego->misil_enemigo, juego->jugador))
             juego->tiempo_impacto = 1.0f;
 
-        if (tanque_vidas(juego->enemigo) <= 0) {
+        if (juego->enemigo && tanque_vidas(juego->enemigo) <= 0) {
             juego->puntaje += 1000;
             juego->resto_x = tanque_x(juego->enemigo);
             juego->resto_y = tanque_y(juego->enemigo);
             juego->tiempo_resto = 1.5f;
             misil_desactivar(juego->misil_enemigo);
-            reaparecer_enemigo(juego);
+            tanque_destruir(juego->enemigo);
+            juego->enemigo = NULL;
         }
+
+        if (!juego->enemigo && juego->tiempo_resto <= 0)
+            crear_enemigo_aleatorio(juego);
     }
 }
 

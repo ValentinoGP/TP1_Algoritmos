@@ -90,18 +90,22 @@ void dibujo_destruir(dibujo_t *dibujo) {
     free(dibujo);
 }
 
-static void renderizar_modelo(dibujo_t *dibujo, const modelo_t *modelo,
-                              float x, float y, float z, float rotacion, size_t limite_lineas) {
+static void renderizar_modelo_rotaciones(dibujo_t *dibujo, const modelo_t *modelo,
+                                         float x, float y, float z,
+                                         float rot_x, float rot_y, float rot_z,
+                                         size_t limite_lineas) {
     if (!modelo) return;
 
     const float *camara = matriz_datos(pila_ver_tope(dibujo->pila));
 
-    float cos_rot = cosf(rotacion), sen_rot = sinf(rotacion);
+    float sx = sinf(rot_x), cx = cosf(rot_x);
+    float sy = sinf(rot_y), cy = cosf(rot_y);
+    float sz = sinf(rot_z), cz = cosf(rot_z);
     float matriz_objeto[16] = {
-        cos_rot, -sen_rot, 0, x,
-        sen_rot,  cos_rot, 0, y,
-        0,  0, 1, z,
-        0,  0, 0, 1
+        cz*cy,      cz*sy*sx - sz*cx, cz*sy*cx + sz*sx, x,
+        sz*cy,      sz*sy*sx + cz*cx, sz*sy*cx - cz*sx, y,
+        -sy,        cy*sx,            cy*cx,            z,
+        0, 0, 0, 1
     };
 
     float transformacion[16];
@@ -158,6 +162,11 @@ static void renderizar_modelo(dibujo_t *dibujo, const modelo_t *modelo,
     }
 }
 
+static void renderizar_modelo(dibujo_t *dibujo, const modelo_t *modelo,
+                              float x, float y, float z, float rotacion, size_t limite_lineas) {
+    renderizar_modelo_rotaciones(dibujo, modelo, x, y, z, 0, 0, rotacion, limite_lineas);
+}
+
 static void transformar_tope(pila_t *pila, matriz_t *nueva) {
     matriz_t *tope = pila_ver_tope(pila);
     matriz_t *aux = matriz_multiplicar(tope, nueva);
@@ -201,7 +210,7 @@ static void renderizar_explosion(dibujo_t *dibujo, const juego_t *juego) {
     SDL_SetRenderDrawColor(dibujo->renderizador, 0xFF, 0x00, 0x00, 0x00);
     float tiempo = 1.5f - juego_tiempo_resto(juego);
     float distancia_x = 5.0f * tiempo;
-    float altura = 10.0f * tiempo - 0.5f * 9.81f * tiempo * tiempo;
+    float altura = 3.0f + 10.0f * tiempo - 0.5f * 9.81f * tiempo * tiempo;
     if (altura < 0) altura = 0;
 
     const modelo_t *piezas[6];
@@ -220,8 +229,11 @@ static void renderizar_explosion(dibujo_t *dibujo, const juego_t *juego) {
         float angulo = i * (2 * M_PI / 6);
         float pieza_x = origen_x + distancia_x * cosf(angulo);
         float pieza_y = origen_y + distancia_x * sinf(angulo);
-        renderizar_modelo(dibujo, piezas[i],
-                          pieza_x, pieza_y, altura, angulo, 0);
+        float rot_x = 4.0f * tiempo * (float)((i % 3) - 1);
+        float rot_y = 3.0f * tiempo * ((i % 2) ? 1.0f : -1.0f);
+        float rot_z = angulo + 5.0f * tiempo * ((i % 2) ? 1.0f : -1.0f);
+        renderizar_modelo_rotaciones(dibujo, piezas[i],
+                                     pieza_x, pieza_y, altura, rot_x, rot_y, rot_z, 0);
     }
 }
 

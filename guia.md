@@ -30,7 +30,7 @@ modelos.stl     — Archivo binario con todos los modelos 3D
 - Estado: jugador y enemigo (`tanque_t`), dos `misil_t` (jugador y enemigo), 50 obstáculos, puntaje, vidas, timers de animación (impacto, resto), angx/angz (head bob), y la lista `lista_modelos` con todos los modelos STL.
 - `juego_crear()`: carga `modelos.stl`, inserta cada modelo en `lista_modelos`, busca los 6 modelos de obstáculos por nombre (`buscar_modelo`), crea 50 obstáculos aleatorios en [-150,150], crea el tanque del jugador en (0,0) mirando +Y, spawnea el enemigo a exactamente 50 unidades girando hasta encontrar una posición sin superposición.
 - `juego_modelo(juego, nombre)` — búsqueda de modelos en `lista_modelos` por nombre (requisito de la consigna).
-- `juego_actualizar`: timers, head bob, física con colisiones (radio 6), IA enemiga, disparos, colisiones de misiles (radio 3), respawn del enemigo a 50u (+1000 score).
+- `juego_actualizar`: timers, head bob, física con colisiones (radio 5), IA enemiga, disparos, colisiones de misiles (radio 3), respawn del enemigo a 50u tras terminar la explosión (+1000 score).
 - La lógica de dibujo NO está acá: `juego.h` solo expone accessors de lectura para que `dibujo` renderice.
 
 ### `dibujo.c/h` — Render (presentación)

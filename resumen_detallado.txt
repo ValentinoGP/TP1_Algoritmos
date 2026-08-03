@@ -1,0 +1,366 @@
+RESUMEN DETALLADO DEL PROYECTO - Battle Zone (TP1 Algoritmos, Grupo 13)
+=======================================================================
+
+Juego 3D wireframe estilo Battle Zone hecho en C99 con SDL2. El zip de
+entrega TP_1_algoritmos_G13.zip contiene los 11 archivos .c, los 10 .h
+y el Makefile.
+
+======================================================================
+main.c - Loop principal
+======================================================================
+
+- main(): inicializa SDL (SDL_Init(SDL_INIT_VIDEO)), crea ventana +
+  renderizador 1024x768 con SDL_CreateWindowAndRenderer, titula
+  "Battle Zone", crea juego_t y dibujo_t. Entra al loop:
+  1. Eventos: poll de SDL_PollEvent; SDL_QUIT -> termina; el resto va a
+     juego_tratar_evento.
+  2. Render: limpia pantalla en negro, llama juego_actualizar, dibuja
+     el mundo con dibujo_dibujar_mundo (solo si no termino) y el HUD
+     con dibujo_dibujar_hud, y hace SDL_RenderPresent.
+  3. Pacing de FPS: si el cuadro tardo menos de 1000/FPS_JUEGO (24) ms
+     hace SDL_Delay; si se paso imprime "Perdiendo cuadros".
+  Al salir: destruye dibujo -> juego -> renderizador -> ventana ->
+  SDL_Quit().
+
+======================================================================
+juego.c / juego.h - TDA juego (estado y logica del juego)
+======================================================================
+
+Estructura juego_t (opaca): tanque jugador y enemigo, array de
+obstaculos, puntaje, flag terminado, timers tiempo_impacto (jugador
+golpeado) y tiempo_resto (explosion enemiga), posicion del resto
+resto_x/y, head-bob angx/angz, tick_anterior (para dt), lista de
+modelos STL y los dos misiles.
+
+- buscar_modelo (estatica): recorre lista_modelos con un iterador de
+  la lista comparando nombres con strcmp; devuelve el modelo_t* o NULL.
+
+- crear_enemigo_aleatorio: loop infinito que genera angulo aleatorio
+  (rand()%628/100 rad) y posicion a exactamente 50 unidades del
+  jugador; llama crear_tanque_enemigo, que devuelve NULL si pisa un
+  obstaculo -> reintenta con otro angulo.
+
+- hay_colision: compara (x,y) contra cada obstaculo y contra el otro
+  tanque con dx^2+dy^2 < 25 (radio 5 m); true si hay colision.
+
+- misil_impacta: si el misil esta inactivo -> false. Revisa obstaculos
+  con radio 3 -> desactiva el misil (explota contra la pared) y false.
+  Revisa el tanque objetivo con radio 3 -> desactiva misil,
+  tanque_recibir_impacto (resta vida), true.
+
+- juego_crear: calloc del juego, crea la lista, abre modelos.stl, lee
+  header/formato y carga TODOS los modelos en lista_modelos (libera
+  coords/lineas temporales tras copiar). Semilla srand(SDL_GetTicks()).
+  Busca los 6 modelos de obstaculos (CUBO1-3, PIRAMIDE1-3); si no hay
+  ninguno imprime error y crea 0 obstaculos. Crea 50 obstaculos en
+  posiciones aleatorias de [-150,150] con rotacion aleatoria. Crea el
+  jugador en (0,0), heading pi/2 (+Y), 4 vidas. Spawnea el enemigo y
+  crea los dos misiles.
+
+- juego_destruir: libera lista (con modelo_destruir), obstaculos,
+  tanques, misiles y el juego.
+
+- juego_tratar_evento: en SDL_KEYDOWN: flechas arrancan movimiento
+  (UP adelante, DOWN atras, RIGHT gira izquierda, LEFT gira derecha -
+  INVERTIDO); barra espaciadora dispara si el misil esta libre y el
+  enfriamiento en 0: lanza el misil con heading phi+torreta del jugador.
+
+- juego_actualizar: calcula dt desde SDL_GetTicks() clampado a 0.1 s.
+  Decrementa timers. Si el jugador quedo sin vidas -> terminado.
+  Head-bob: al moverse suma ruido a angx/angz y decae x0.92. Actualiza
+  jugador y misiles. SI EXISTE ENEMIGO: lo actualiza, revierte
+  posiciones en colisiones (guardando la posicion anterior), y corre
+  la IA (movimiento aleatorio con probabilidad 1/24 por cuadro al
+  estar quieto, torreta que apunta al jugador dentro de +-1 rad y
+  dispara con |desvio| < 0.1 rad, o recentra la torreta si lo perdio
+  de vista). Colisiones de misiles: el del jugador solo si hay enemigo;
+  el enemigo golpeando al jugador setea tiempo_impacto = 1. SI EL
+  ENEMIGO MUERE: +1000 puntos, guarda posicion del resto,
+  tiempo_resto = 1.5, desactiva su misil, lo destruye y deja
+  enemigo = NULL; cuando tiempo_resto llega a 0 spawnea el nuevo
+  (respawn diferido hasta que termine la explosion).
+
+- Accessors (juego_jugador_*, juego_enemigo_*, juego_misil_*,
+  juego_obstaculo, juego_modelo, juego_terminado, etc.): getters de
+  solo lectura que dibujo usa para renderizar; juego_modelo busca por
+  nombre en el catalogo.
+
+======================================================================
+dibujo.c / dibujo.h - TDA dibujo (render 3D, solo presentacion)
+======================================================================
+
+Estructura dibujo_t: SDL_Renderer*, pila de matrices de transformacion
+(pila_t) con la identidad en el fondo, y modelos_t con punteros a los
+modelos (horizonte, montana, luna, tanque, torreta, radar, misil, *,
+#, +, -, RESTO1/2, letras A-Z, digitos 0-9).
+
+- obtener_modelos: pide cada modelo a juego_modelo; las letras/digitos
+  se buscan con (char[]){'A'+i, '\0'}.
+
+- dibujo_crear: aloca, crea la pila y apila la matriz identidad,
+  guarda los modelos.
+
+- dibujo_destruir: matriz_destruir(pila_desapilar(pila)) (libera la
+  identidad del fondo) y luego pila_destruir.
+
+- renderizar_modelo_rotaciones: el corazon del render. Toma la camara
+  del tope de la pila, arma la matriz objeto Rz*Ry*Rx (rotaciones en
+  X, Y, Z + traslacion), la multiplica por la camara, y por cada linea
+  del modelo (hasta limite_lineas): proyecta ambos vertices (divide
+  por w homogenea), descarta lineas con w=0 o detras de camara
+  (profundidad < 1), convierte a coordenadas de pantalla y dibuja con
+  SDL_RenderDrawLine.
+
+- renderizar_modelo: wrapper que llama a la anterior con solo rotacion
+  en Z (todos los usos normales del juego).
+
+- transformar_tope: reemplaza el tope de la pila por tope x nueva,
+  destruyendo ambas matrices (mantiene la pila en un solo nivel).
+
+- construir_camara: apila identidad y la multiplica por
+  mper(1.8) x Mz(pi/2+angz) x My(pi/2-angx) x Mz(-phi) x Mt(-x,-y,-3)
+  - camara del jugador con perspectiva y head-bob.
+
+- construir_camara_hud: camara fija mper(1.8) x Mt(0,0,-12) para
+  elementos en pantalla.
+
+- renderizar_explosion: si tiempo_resto <= 0 no hace nada. Tiempo
+  transcurrido = 1.5 - resto. Las 6 piezas (torreta, radar, resto1,
+  resto2, resto1, resto2) salen en circulo con distancia = 5*t y tiro
+  oblicuo altura = 3 + 10*t - (1/2)*9.81*t^2 (clampada a >= 0); cada
+  pieza rota en vuelo con rot_x = 4t*((i%3)-1), rot_y = +-3t,
+  rot_z = angulo +- 5t.
+
+- renderizar_texto: dibuja cada caracter con el modelo de letra
+  correspondiente (indice = char - 'A'), centrado horizontalmente.
+
+- renderizar_digitos: convierte el entero a digitos y los dibuja
+  centrados o alineados a la derecha.
+
+- diferencia_enemigo: angulo enemigo - heading del jugador normalizado
+  a [-pi, pi] (guardado con juego_enemigo_existe).
+
+- dibujo_dibujar_mundo: construye camara; dibuja horizonte (gris
+  0x80), montanas (0x40), luna (0xFFFECC en z=-50); obstaculos en
+  verde; enemigo en blanco (tanque, torreta en z=3, radar en z=3.5
+  girando con SDL_GetTicks()/500); misil del jugador blanco y del
+  enemigo rojo (z=2.5); explosion; desapila y destruye la camara.
+
+- dibujo_dibujar_hud: camara HUD; mira + (roja) si el enemigo esta a
+  <0.15 rad, - si no; si termino: "GAME OVER" rojo + puntaje blanco;
+  si no: impacto # con lineas progresivas (rojo, segun tiempo_impacto),
+  vidas como * blancas (vidas-1), puntaje a la derecha, texto
+  direccional (ATRAS/IZQUIERDA/DERECHA si |diff| > 1, con umbral
+  2.44), y brujula (cruz gris + aguja blanca en coordenadas de
+  pantalla).
+
+======================================================================
+tanque.c / tanque.h - TDA tanque
+======================================================================
+
+Estructura tanque_t: x, y, phi (heading), torreta, vidas,
+enfriamiento (2 s), tiempo_movimiento y mov_actual.
+
+- tanque_crear / tanque_destruir: malloc/free con inicializacion
+  (torreta 0, enfriamiento 0, sin movimiento).
+
+- Accessors: x, y, phi, vidas, torreta, tanque_puede_disparar
+  (enfriamiento <= 0).
+
+- tanque_set_posicion: restaura posicion (se usa al revertir
+  colisiones).
+
+- tanque_girar: suma delta a phi envolviendo a [-pi, pi].
+
+- tanque_mover: avanza delta en direccion cos(phi), sin(phi).
+
+- tanque_girar_torreta: suma y clamp a +-1 rad.
+
+- tanque_recibir_impacto: resta una vida.
+
+- tanque_disparar: si el enfriamiento > 0 devuelve false; si no lo
+  setea en 2.0 s y true (solo valida - el misil lo lanza juego).
+
+- tanque_iniciar_movimiento: delega con duracion fija 0.5 s (cada
+  keypress reinicia el timer -> mantener tecla = movimiento continuo).
+
+- tanque_iniciar_movimiento_tiempo: fija movimiento y duracion (lo usa
+  la IA con duraciones aleatorias).
+
+- tanque_movimiento: getter del movimiento actual.
+
+- tanque_actualizar: decrementa enfriamiento; si hay movimiento en
+  curso, clamp dt al tiempo restante y aplica velocidad 7 m/s o
+  rotacion 0.36 rad/s (con wrap de phi); al agotarse el timer vuelve
+  a MOV_NINGUNO.
+
+- crear_tanque_enemigo: si algun obstaculo esta a sqrt(dx^2+dy^2) < 5
+  devuelve NULL (spawn invalido); si no crea el tanque.
+
+======================================================================
+misil.c / misil.h - Entidad misil
+======================================================================
+
+Estructura misil_t: x, y, phi, activo, tiempo (vida). Constantes:
+24 m/s, 2 s de vida.
+
+- misil_crear / misil_destruir: malloc/free, inactivo por defecto.
+- misil_lanzar: setea posicion, direccion, activo=true y vida = 2 s.
+- misil_desactivar: apaga el flag (colision).
+- misil_actualizar: avanza 24*cos(phi)*dt / 24*sin(phi)*dt, descuenta
+  tiempo y se desactiva solo al llegar a 0.
+- Accessors: activo, x, y, phi.
+
+======================================================================
+obstaculo.c / obstaculo.h - Obstaculo estatico
+======================================================================
+
+Estructura: x, y, phi, puntero al modelo (no lo posee).
+obstaculo_crear guarda los 4 valores; obstaculo_destruir solo libera
+el struct; accessors para x, y, phi y modelo.
+
+======================================================================
+modelo.c / modelo.h - Modelo 3D wireframe
+======================================================================
+
+Estructura: nombre (string), coords (float[3*ncoords]), ncoords,
+lineas (indices size_t[2*nlineas]), nlineas.
+
+- modelo_crear: COPIA el nombre, las coords y las lineas a arrays
+  propios (el caller puede hacer free inmediato); si una asignacion
+  falla libera lo ya allocado y devuelve NULL.
+- modelo_destruir: libera nombre, coords, lineas y el struct.
+- Accessors: nombre, coords, ncoords, lineas, nlineas.
+
+======================================================================
+matriz.c / matriz.h - Algebra de matrices 4x4
+======================================================================
+
+Estructura matriz_t: float *m row-major, filas, columnas.
+
+- _matriz_crear(n,m): allocator interno (calloc de n*m floats).
+- matriz_destruir: libera array y struct.
+- Accessors: filas, columnas, matriz_obtener (m[fila*cols+col]),
+  matriz_establecer, matriz_datos (puntero crudo).
+- Fabricas: crear_identidad (diagonal de 1); crear_mz (rotacion Z:
+  c,-s / s,c en el 2x2 superior izquierdo); crear_my (rotacion Y:
+  c en esquinas); crear_mc (alias de mz); crear_mn (reflexion: -1 en
+  la anteultima columna de la ultima fila); crear_mt (traslacion en
+  la columna 4); crear_mper (perspectiva: m[3][2] = -1/d, m[3][3] = 0).
+- matriz_multiplicar: producto matricial estandar en triple loop;
+  nueva matriz; NULL si las dimensiones no matchean.
+- matriz_agregar_fila: realloc +1 fila y copia.
+- matriz_aplicar: aplica la 4x4 a puntos 3D (agrega w=1, divide por w
+  homogenea y guarda la w original como profundidad en la 3ra columna).
+- matriz_datos: devuelve el array interno (para el render).
+
+======================================================================
+stl.c / stl.h - Lector STL binario (formato catedra)
+======================================================================
+
+- leer_int16/int32/float_little_endian: ensamblan bytes little-endian
+  (los ints con bytes[0] | bytes[1]<<8 | ..., el float via memcpy del
+  int32).
+- leer_encabezado_stl: valida "STL", version 3 y offset 25.
+- leer_formato_STL: valida tamano 12, dimensiones 3, tipo_coord 0;
+  devuelve unidades y maxlong.
+- leer_modelo_3d: lee etiqueta (maxlong chars), ncoords, floats de
+  coords, nlineas e indices de lineas (int32 -> size_t); en cualquier
+  fallo libera lo allocado y devuelve false.
+
+======================================================================
+pila.c / pila.h - Pila generica
+======================================================================
+
+Nodos {dato, sig}, pila con tope. pila_crear (malloc),
+pila_destruir (desapila todo con destructor opcional + free),
+pila_esta_vacia, pila_ver_tope, pila_apilar (nodo nuevo arriba),
+pila_desapilar (saca tope, devuelve dato, libera nodo). Se usa en
+dibujo como stack de transformaciones.
+
+======================================================================
+lista.c / lista.h - Lista enlazada generica
+======================================================================
+
+Lista con prim, ult, largo. Insertar primero/ultimo (ajustando
+ult/prim si estaba vacia), borrar primero, largo, lista_recorrer
+(iterador interno con callback visitar que corta con false).
+Iterador externo {lista, ant, act}: crear, avanzar, ver actual,
+al_final, destruir, insertar (antes del actual, arregla prim/ult),
+borrar (quita el actual y arregla ult). Se usa en juego.c para el
+catalogo de modelos.
+
+======================================================================
+Makefile
+======================================================================
+
+Compila con gcc -Wall -Werror -std=c99 -pedantic -g + cflags de
+sdl2-config (con /SDL2 quitado del path para poder usar
+#include <SDL2/SDL.h>), linkea -lSDL2 -lm, lista de dependencias
+explicitas entre objetos, clean borra .o y el binario.
+
+======================================================================
+POSIBLES PREGUNTAS DE DEFENSA (si el profesor lee el codigo)
+======================================================================
+
+matriz.c (el mas probable)
+--------------------------
+- matriz_multiplicar: por que se multiplican en ese orden y por que no
+  es conmutativa? Que pasa si las dimensiones no matchean?
+- matriz_aplicar: por que usar coordenadas homogeneas (w=1) y por que
+  se divide por w? Que es la profundidad que se guarda en la 3ra
+  columna?
+- matriz_crear_mper: como se deriva m[3][2] = -1/d? Que hace esa fila?
+
+dibujo.c (el clasico)
+---------------------
+- construir_camara: explicar la composicion
+  mper x Mz(pi/2+angz) x My(pi/2-angx) x Mz(-phi) x Mt(-x,-y,-3):
+  por que pi/2? Por que se traslada por -x,-y? En que orden se aplican?
+- renderizar_modelo_rotaciones: seguir el recorrido de un vertice
+  hasta el pixel. Por que se descartan w == 0 y profundidad < 1?
+- La pila: por que una pila y no una sola matriz? Por que la identidad
+  al fondo y en que orden se destruye?
+
+juego.c
+-------
+- juego_actualizar: por que clampear dt a 0.1? Que pasa si no se hace?
+  Por que la normalizacion del angulo con los dos while?
+- Colisiones: por que dx^2+dy^2 < 25 y no sqrt? Diferencia entre radio
+  5 (tanques), 3 (misiles) y el chequeo de spawn en
+  crear_tanque_enemigo.
+- Respawn: que pasa entre la muerte del enemigo y su reaparicion?
+  Por que enemigo == NULL y quien lo guarda? (por que no crashea dibujo)
+
+tanque.c
+--------
+- tanque_actualizar: el clamp de dt al tiempo restante (efectivo),
+  por que es necesario.
+- Movimiento por tiempo: por que cada keypress reinicia 0.5 s? Como es
+  el movimiento continuo con key-repeat?
+
+stl.c
+-----
+- Por que armar los bytes a mano (little-endian) en vez de fread
+  directo? Que valida leer_encabezado_stl?
+
+Memoria / diseno (casi seguro)
+------------------------------
+- Reglas de ownership: quien libera cada cosa? modelo_crear copia,
+  obstaculo no posee el modelo, orden de destruccion de la pila, y por
+  que el orden dibujo_destruir antes de juego_destruir en main.
+- Por que tipos opacos y accessors? Que se rompe si dibujo accediera
+  a juego por dentro?
+
+Trampas ya conocidas del codigo (si las notan, preguntan)
+---------------------------------------------------------
+- M_PI vale 3.14 en juego.c/dibujo.c y completo en tanque.c.
+- Las flechas RIGHT/LEFT estan invertidas respecto al sentido
+  intuitivo (RIGHT gira a la izquierda).
+- El enemigo spawnea a 50u pero el misil vive 2 s a 24 m/s (48 m):
+  alcanza, pero justo.
+
+Consejo para la defensa: repasar bien matriz.c y construir_camara, y
+que cada integrante explique de memoria el flujo de un cuadro
+(evento -> update -> dibujo) sin mirar el codigo.
+
